@@ -1,0 +1,137 @@
+import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  isSameMonth,
+  isSameDay,
+  isToday,
+  parseISO,
+} from 'date-fns'
+import { useCalendarStore, useModalStore } from '../../stores'
+import type { Task } from '../../types'
+
+export function CalendarGrid() {
+  const { i18n } = useTranslation()
+  const { selectedDate, events } = useCalendarStore()
+  const { openDetailModal, openCreateModal } = useModalStore()
+
+  const days = useMemo(() => {
+    const monthStart = startOfMonth(selectedDate)
+    const monthEnd = endOfMonth(monthStart)
+    const calendarStart = startOfWeek(monthStart, {
+      weekStartsOn: i18n.language === 'ko' ? 0 : 0,
+    })
+    const calendarEnd = endOfWeek(monthEnd, {
+      weekStartsOn: i18n.language === 'ko' ? 0 : 0,
+    })
+
+    return eachDayOfInterval({ start: calendarStart, end: calendarEnd })
+  }, [selectedDate, i18n.language])
+
+  const weekDays =
+    i18n.language === 'ko'
+      ? ['일', '월', '화', '수', '목', '금', '토']
+      : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+  const getEventsForDay = (day: Date): Task[] => {
+    return events
+      .filter((event) => {
+        const eventDate = parseISO(event.start_time)
+        return isSameDay(eventDate, day)
+      })
+      .sort((a, b) => {
+        return new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      })
+  }
+
+  return (
+    <div className="flex-1 flex flex-col">
+      <div className="grid grid-cols-7 gap-px bg-gray-200 dark:bg-gray-700">
+        {weekDays.map((day, index) => (
+          <div
+            key={day}
+            className={`px-2 py-3 text-center text-sm font-medium bg-gray-50 dark:bg-gray-800 ${
+              index === 0
+                ? 'text-red-500'
+                : index === 6
+                  ? 'text-blue-500'
+                  : 'text-gray-700 dark:text-gray-300'
+            }`}
+          >
+            {day}
+          </div>
+        ))}
+      </div>
+
+      <div className="flex-1 grid grid-cols-7 grid-rows-6 gap-px bg-gray-200 dark:bg-gray-700">
+        {days.map((day) => {
+          const dayEvents = getEventsForDay(day)
+          const isCurrentMonth = isSameMonth(day, selectedDate)
+          const dayOfWeek = day.getDay()
+
+          return (
+            <div
+              key={day.toISOString()}
+              className={`min-h-[100px] p-2 bg-white dark:bg-gray-900 ${
+                !isCurrentMonth ? 'opacity-40' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span
+                  className={`text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full ${
+                    isToday(day)
+                      ? 'bg-blue-500 text-white'
+                      : dayOfWeek === 0
+                        ? 'text-red-500'
+                        : dayOfWeek === 6
+                          ? 'text-blue-500'
+                          : 'text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  {format(day, 'd')}
+                </span>
+                {isCurrentMonth && (
+                  <button
+                    onClick={() => openCreateModal(day)}
+                    className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-500 transition-colors opacity-0 hover:opacity-100 group-hover:opacity-100"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 4v16m8-8H4"
+                      />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1 overflow-y-auto max-h-[60px]">
+                {dayEvents.map((event) => (
+                  <button
+                    key={event.id}
+                    onClick={() => openDetailModal(event)}
+                    className="w-full text-left px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded truncate hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                  >
+                    {event.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
