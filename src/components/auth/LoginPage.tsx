@@ -1,12 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { listen } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
+import { open } from '@tauri-apps/plugin-shell'
 import { useAuthStore, useThemeStore } from '../../stores'
-import { authApi } from '../../api'
-import { setupOAuthListener, getRedirectUri, openOAuthUrl, isTauriApp } from '../../utils/deeplink'
 
-const KAKAO_CLIENT_ID = import.meta.env.VITE_KAKAO_CLIENT_ID
-const KAKAO_CLIENT_SECRET = import.meta.env.VITE_KAKAO_CLIENT_SECRET
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
 export function LoginPage() {
   const { t } = useTranslation()
@@ -15,216 +14,120 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Get redirect URI based on environment (localhost for dev, custom scheme for prod)
-  const KAKAO_REDIRECT_URI = getRedirectUri()
-
-  // 환경 변수 로그
-  useEffect(() => {
-    console.log('🔧 Environment Variables:', {
-      KAKAO_CLIENT_ID: KAKAO_CLIENT_ID ? `${KAKAO_CLIENT_ID.substring(0, 10)}...` : 'NOT SET',
-      KAKAO_CLIENT_SECRET: KAKAO_CLIENT_SECRET ? `${KAKAO_CLIENT_SECRET.substring(0, 10)}...` : 'NOT SET',
-      KAKAO_REDIRECT_URI,
-      API_BASE_URL,
-      isTauriApp: isTauriApp(),
-      mode: import.meta.env.MODE,
-    })
-  }, [])
-
-  // Setup deep link listener for production (Tauri app)
-  useEffect(() => {
-    if (!isTauriApp()) {
-      console.log('📱 Not a Tauri app, skipping deep link listener')
-      return
-    }
-
-    console.log('🔗 Setting up deep link listener for OAuth callbacks')
-
-    let cleanup: (() => void) | undefined
-
-    setupOAuthListener(({ code, error: oauthError }) => {
-      console.log('🔗 Deep link OAuth callback received:', {
-        hasCode: !!code,
-        hasError: !!oauthError,
-      })
-
-      if (oauthError) {
-        console.error('❌ OAuth Error from deep link:', oauthError)
-        setError(t('auth.loginFailed'))
-        return
-      }
-
-      if (code) {
-        console.log('✅ OAuth code received from deep link, processing...')
-        handleKakaoCallback(code)
-      }
-    }).then((unlistenFn) => {
-      cleanup = unlistenFn
-    })
-
-    return () => {
-      cleanup?.()
-    }
-  }, [])
-
-  // Handle OAuth callback (for web/localhost flow)
-  useEffect(() => {
-    // Skip if in Tauri app (handled by deep link listener)
-    if (isTauriApp()) {
-      return
-    }
-
-    const urlParams = new URLSearchParams(window.location.search)
-    const code = urlParams.get('code')
-    const errorParam = urlParams.get('error')
-
-    console.log('🔍 URL Parameters:', {
-      code: code ? `${code.substring(0, 20)}...` : null,
-      error: errorParam,
-      fullURL: window.location.href,
-    })
-
-    if (errorParam) {
-      console.error('❌ OAuth Error Parameter:', errorParam)
-      setError(t('auth.loginFailed'))
-      window.history.replaceState({}, document.title, window.location.pathname)
-      return
-    }
-
-    if (code) {
-      console.log('✅ OAuth code received from URL, starting callback...')
-      handleKakaoCallback(code)
-    }
-  }, [])
-
-  const handleKakaoCallback = async (code: string) => {
+  const handleKakaoLogin = async () => {
+    console.log('🚀 카카오 로그인 시작')
     setIsLoading(true)
     setError(null)
 
     try {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      console.log('1️⃣ Step 1: Exchanging code for Kakao token...')
-      console.log('   Code:', code.substring(0, 30) + '...')
+      // 1. Start OAuth server via Tauri command
+      console.log('📡 OAuth 서버 시작 중...')
+      const port = await invoke<number>('start_oauth_server')
+      console.log('✅ OAuth 서버 시작 완료. 포트:', port)
 
-      const tokenRequestBody = {
-        grant_type: 'authorization_code',
-        client_id: KAKAO_CLIENT_ID,
-        client_secret: KAKAO_CLIENT_SECRET,
-        redirect_uri: KAKAO_REDIRECT_URI,
-        code,
-      }
-
-      console.log('   Token Request Body:', {
-        ...tokenRequestBody,
-        client_id: KAKAO_CLIENT_ID?.substring(0, 10) + '...',
-        client_secret: KAKAO_CLIENT_SECRET?.substring(0, 10) + '...',
-        code: code.substring(0, 20) + '...',
-      })
-
-      // Exchange code for Kakao access token
-      const tokenResponse = await fetch('https://kauth.kakao.com/oauth/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams(tokenRequestBody),
-      })
-
-      console.log('   Token Response Status:', tokenResponse.status, tokenResponse.statusText)
-
-      const tokenData = await tokenResponse.json()
-      console.log('2️⃣ Step 2: Kakao token response received')
-      console.log('   Success:', !!tokenData.access_token)
-      console.log('   Error:', tokenData.error || 'none')
-      console.log('   Token preview:', tokenData.access_token ? tokenData.access_token.substring(0, 30) + '...' : 'N/A')
-
-      if (tokenData.error) {
-        console.error('❌ Kakao token error:', tokenData)
-        setError(`${t('auth.loginFailed')} (Kakao: ${tokenData.error})`)
-        window.history.replaceState({}, document.title, window.location.pathname)
-        return
-      }
-
-      if (tokenData.access_token) {
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-        console.log('3️⃣ Step 3: Sending Kakao token to backend...')
-        console.log('   Backend URL:', `${API_BASE_URL}/api/auth/external/kakao`)
-        console.log('   Access token length:', tokenData.access_token.length)
+      // 2. Listen for the redirect URL from the OAuth server
+      console.log('👂 OAuth 콜백 리스너 등록 중...')
+      const unlisten = await listen<string>('oauth://url', async (event) => {
+        console.log('📥 OAuth 콜백 수신:', event.payload)
 
         try {
-          const response = await authApi.loginWithKakao(tokenData.access_token)
+          const redirectUrl = event.payload
+          const url = new URL(redirectUrl)
+          const code = url.searchParams.get('code')
 
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-          console.log('4️⃣ Step 4: Backend response received')
-          console.log('   Response keys:', Object.keys(response))
-          console.log('   User:', response.user ? '✓' : '✗')
-          console.log('   AccessToken:', response.accessToken ? '✓' : '✗')
-          console.log('   RefreshToken:', response.refreshToken ? '✓' : '✗')
+          console.log('🔑 인증 코드 추출:', { hasCode: !!code })
 
-          if (response.user) {
-            console.log('   User details:', {
-              memberId: response.user.member_id,
-              email: response.user.email,
-              nickname: response.user.nickname,
-            })
+          if (!code) {
+            console.error('❌ 인증 코드 없음')
+            setError('Missing authorization code in OAuth callback')
+            setIsLoading(false)
+            unlisten()
+            return
           }
 
-          setAuth(response.user, response.accessToken, response.refreshToken)
-          console.log('✅ Login successful! Auth state updated.')
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-          window.history.replaceState({}, document.title, window.location.pathname)
-        } catch (backendError) {
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-          console.error('❌ Backend API error:', backendError)
-          if (backendError instanceof Error) {
-            console.error('   Error message:', backendError.message)
-            console.error('   Error stack:', backendError.stack)
+          // 3. 백엔드로 인증 코드 전송하여 토큰 받기
+          console.log('📡 백엔드로 인증 코드 전송 중...')
+          const callbackResponse = await fetch(
+            `${API_BASE_URL}/api/auth/kakao/callback?code=${encodeURIComponent(code)}`,
+          )
+
+          console.log('📥 백엔드 콜백 응답 상태:', callbackResponse.status)
+
+          if (!callbackResponse.ok) {
+            const errorText = await callbackResponse.text()
+            console.error('❌ 백엔드 콜백 에러:', errorText)
+            throw new Error('Failed to process authentication')
           }
-          console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-          throw backendError
+
+          const authData = await callbackResponse.json()
+          console.log('✅ 인증 데이터 받음:', {
+            hasAccessToken: !!authData.accessToken,
+            hasRefreshToken: !!authData.refreshToken,
+            member: authData.member,
+          })
+
+          if (!authData.accessToken || !authData.refreshToken || !authData.member) {
+            console.error('❌ 토큰 또는 멤버 정보 없음')
+            throw new Error('Invalid authentication response')
+          }
+
+          // 4. Zustand store에 인증 정보 저장
+          console.log('💾 인증 정보 저장 중...')
+          setAuth(authData.member, authData.accessToken, authData.refreshToken)
+          console.log('✅ 로그인 성공!')
+
+          setError(null)
+        } catch (err) {
+          console.error('❌ OAuth 콜백 처리 실패:', err)
+          setError('Login succeeded but failed to process authentication')
+        } finally {
+          setIsLoading(false)
+          unlisten()
         }
-      } else {
-        console.error('❌ No access token in Kakao response:', tokenData)
-        setError(t('auth.loginFailed'))
-        window.history.replaceState({}, document.title, window.location.pathname)
+      })
+      console.log('✅ 리스너 등록 완료')
+
+      // 4. Get auth URL from backend, passing the localhost redirect port
+      console.log('📡 백엔드에서 OAuth URL 요청 중...')
+      const redirectUri = `http://localhost:${port}`
+      console.log('🔗 Redirect URI:', redirectUri)
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/auth/kakao/start?callback=${encodeURIComponent(redirectUri)}`,
+      )
+
+      console.log('📥 백엔드 응답 상태:', response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ 백엔드 에러:', errorText)
+        throw new Error(`Backend returned ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log('✅ OAuth 응답 받음:', data)
+
+      const authUrl = data.authUrl
+      if (!authUrl || typeof authUrl !== 'string') {
+        console.error('❌ 유효하지 않은 OAuth URL:', data)
+        throw new Error('No auth URL received from backend')
+      }
+
+      // 5. Open Kakao OAuth URL with Tauri shell API
+      console.log('🌐 시스템 브라우저 오픈 시도:', authUrl)
+      try {
+        await open(authUrl)
+        console.log('✅ 브라우저 오픈 완료. 사용자 로그인 대기 중...')
+      } catch (openErr) {
+        console.error('❌ 브라우저 오픈 실패:', openErr)
+        throw new Error('Failed to open browser')
       }
     } catch (err) {
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
       console.error('❌ Kakao login error:', err)
-      if (err instanceof Error) {
-        console.error('   Error name:', err.name)
-        console.error('   Error message:', err.message)
-        console.error('   Error stack:', err.stack)
-      }
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-
       const errorMessage = err instanceof Error ? err.message : 'Unknown error'
       setError(`${t('auth.loginFailed')} (${errorMessage})`)
-      window.history.replaceState({}, document.title, window.location.pathname)
-    } finally {
       setIsLoading(false)
     }
-  }
-
-  const handleKakaoLogin = async () => {
-    if (!KAKAO_CLIENT_ID) {
-      console.error('❌ Kakao Client ID is not configured')
-      setError('Kakao Client ID is not configured')
-      return
-    }
-
-    console.log('🚀 Starting Kakao OAuth flow...')
-    console.log('   Redirect URI:', KAKAO_REDIRECT_URI)
-    console.log('   Is Tauri App:', isTauriApp())
-
-    // Build Kakao OAuth URL
-    const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${KAKAO_CLIENT_ID}&redirect_uri=${encodeURIComponent(
-      KAKAO_REDIRECT_URI,
-    )}&response_type=code`
-
-    console.log('   Auth URL:', kakaoAuthUrl)
-
-    // Open OAuth URL (system browser for Tauri, same window for web)
-    await openOAuthUrl(kakaoAuthUrl)
   }
 
   return (
@@ -261,6 +164,15 @@ export function LoginPage() {
             <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <p className="text-sm text-red-600 dark:text-red-400 text-center">
                 {error}
+              </p>
+            </div>
+          )}
+
+          {/* Loading state info */}
+          {isLoading && (
+            <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <p className="text-sm text-blue-600 dark:text-blue-400 text-center">
+                {t('auth.waitingForBrowser', 'Browser opened. Complete login and return to the app...')}
               </p>
             </div>
           )}

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "node scripts/inject-config.js && tauri build",
+    "tauri:build:ci": "tauri build"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.18",
@@ -17,12 +18,15 @@
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.23",
+    "dotenv": "^16.4.5",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.3",
     "vite": "^7.2.4"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.1",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@tauri-apps/plugin-shell": "^2.3.4",
     "@vitejs/plugin-react": "^5.1.2",
     "date-fns": "^4.1.0",
     "i18next": "^25.8.0",

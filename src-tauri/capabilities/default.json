@@ -7,7 +7,13 @@
   ],
   "permissions": [
     "core:default",
+    "core:window:allow-create",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "oauth:default",
     "shell:allow-open",
-    "deep-link:default"
+    "dialog:allow-ask",
+    "dialog:allow-message"
   ]
 }

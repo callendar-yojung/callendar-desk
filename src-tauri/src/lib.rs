@@ -1,5 +1,5 @@
 mod position;
-mod deep_link;
+mod oauth;
 
 #[cfg(target_os = "windows")]
 mod desktop_attach;
@@ -17,6 +17,7 @@ pub fn run() {
     {
         builder = builder.invoke_handler(tauri::generate_handler![
             position::save_window_position,
+            oauth::start_oauth_server,
             autostart::set_autostart,
             autostart::get_autostart,
         ]);
@@ -26,12 +27,14 @@ pub fn run() {
     {
         builder = builder.invoke_handler(tauri::generate_handler![
             position::save_window_position,
+            oauth::start_oauth_server,
         ]);
     }
 
     builder
+        .plugin(tauri_plugin_oauth::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Logging (debug only)
             if cfg!(debug_assertions) {
@@ -43,9 +46,6 @@ pub fn run() {
             }
 
             let handle = app.handle().clone();
-
-            // ── Setup OAuth deep link handler ──────────────────────────
-            deep_link::setup_deep_link(app)?;
 
             // ── Restore saved window position ──────────────────────────
             position::restore_position(&handle);

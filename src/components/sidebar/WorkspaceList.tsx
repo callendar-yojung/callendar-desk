@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ask } from '@tauri-apps/plugin-dialog'
 import { useWorkspaceStore, useAuthStore } from '../../stores'
 import { workspaceApi } from '../../api'
 
@@ -14,12 +15,14 @@ export function WorkspaceList() {
     selectedWorkspaceId,
     selectWorkspace,
     addWorkspace,
+    removeWorkspace,
     isLoading,
   } = useWorkspaceStore()
 
   const [isAdding, setIsAdding] = useState(false)
   const [name, setName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   /** 워크스페이스 생성 */
@@ -61,6 +64,35 @@ export function WorkspaceList() {
       alert(t('workspace.createError') || '워크스페이스 생성에 실패했습니다')
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  /** 워크스페이스 삭제 */
+  const deleteWorkspace = async (workspaceId: number, workspaceName: string) => {
+    if (deletingId) return // 이미 삭제 중이면 무시
+
+    // Tauri dialog를 사용한 확인 메시지
+    const confirmed = await ask(
+      `${t('workspace.deleteConfirmMessage')}\n\n"${workspaceName}"`,
+      {
+        title: t('workspace.deleteConfirm'),
+        type: 'warning',
+        okLabel: t('workspace.delete'),
+        cancelLabel: t('event.cancel'),
+      }
+    )
+
+    if (!confirmed) return
+
+    setDeletingId(workspaceId)
+    try {
+      await workspaceApi.deleteWorkspace(workspaceId)
+      removeWorkspace(workspaceId)
+    } catch (e) {
+      console.error('Failed to delete workspace:', e)
+      alert(t('workspace.deleteError') || '워크스페이스 삭제에 실패했습니다')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -155,24 +187,45 @@ export function WorkspaceList() {
         ) : (
             <div className="flex flex-col gap-1">
               {workspaces.map((ws) => (
-                  <button
+                  <div
                       key={ws.workspace_id}
-                      onClick={() => selectWorkspace(ws.workspace_id)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                      className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                           selectedWorkspaceId === ws.workspace_id
                               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                               : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                       }`}
                   >
-                    <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => selectWorkspace(ws.workspace_id)}
+                        className="flex-1 flex items-center gap-2 text-left"
+                    >
                       <div
-                          className={`w-2 h-2 rounded-full ${
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${
                               ws.type === 'personal' ? 'bg-green-500' : 'bg-purple-500'
                           }`}
                       />
                       <span className="truncate">{ws.name}</span>
-                    </div>
-                  </button>
+                    </button>
+
+                    {/* 삭제 버튼 */}
+                    <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteWorkspace(ws.workspace_id, ws.name)
+                        }}
+                        disabled={deletingId === ws.workspace_id}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all disabled:opacity-50"
+                        title={t('workspace.delete')}
+                    >
+                      {deletingId === ws.workspace_id ? (
+                        <div className="w-3 h-3 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
               ))}
             </div>
         )}

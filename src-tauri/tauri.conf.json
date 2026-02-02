@@ -47,12 +47,5 @@
     "iOS": {},
     "android": {}
   },
-  "plugins": {
-    "deepLink": {
-      "mobile": [],
-      "desktop": {
-        "schemes": ["${TAURI_DEEP_LINK_SCHEME}"]
-      }
-    }
-  }
+  "plugins": {}
 }
