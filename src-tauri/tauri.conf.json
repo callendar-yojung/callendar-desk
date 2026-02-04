@@ -2,13 +2,15 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Desktop Calendar",
   "version": "0.1.0",
-  "identifier": "com.desktop-calendar.app",
+  "identifier": "com.deskcal.app",
+
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
+
   "app": {
     "windows": [
       {
@@ -16,13 +18,6 @@
         "title": "Desktop Calendar",
         "width": 1000,
         "height": 700,
-        "minWidth": 600,
-        "minHeight": 400,
-        "resizable": true,
-        "fullscreen": false,
-        "decorations": false,
-        "transparent": true,
-        "center": true,
         "devtools": true
       }
     ],
@@ -30,22 +25,25 @@
       "csp": null
     }
   },
+
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
     "macOS": {
-      "frameworks": [],
-      "minimumSystemVersion": "10.15"
-    },
-    "iOS": {},
-    "android": {}
+      "entitlements": "Entitlements.plist",
+      "signingIdentity": "-",
+      "infoPlist": "Info.plist"
+    }
   },
-  "plugins": {}
+
+  "plugins": {
+    "shell": {
+      "open": true
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["deskcal"]
+      }
+    }
+  }
 }

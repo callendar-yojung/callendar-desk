@@ -1,0 +1,150 @@
+name: Tauri Build & Upload
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install Rust (for Tauri)
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Install system dependencies (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Tauri app
+        run: npm run tauri:build
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Prepare build artifacts
+        id: prepare_artifacts
+        shell: bash
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            OS_TYPE="windows"
+            BUILD_DIR="src-tauri/target/release/bundle/msi"
+            ZIP_NAME="desktop-calendar-${VERSION}-windows-x64.zip"
+            ARTIFACT_EXT=".msi"
+          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            OS_TYPE="macos"
+            BUILD_DIR="src-tauri/target/release/bundle/dmg"
+            ZIP_NAME="desktop-calendar-${VERSION}-macos-universal.zip"
+            ARTIFACT_EXT=".dmg"
+          else
+            OS_TYPE="linux"
+            BUILD_DIR="src-tauri/target/release/bundle/deb"
+            ZIP_NAME="desktop-calendar-${VERSION}-linux-x64.zip"
+            ARTIFACT_EXT=".deb"
+          fi
+          
+          echo "OS_TYPE=${OS_TYPE}" >> $GITHUB_OUTPUT
+          echo "BUILD_DIR=${BUILD_DIR}" >> $GITHUB_OUTPUT
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_OUTPUT
+          echo "ARTIFACT_EXT=${ARTIFACT_EXT}" >> $GITHUB_OUTPUT
+          
+          # 빌드 파일 압축
+          cd ${BUILD_DIR}
+          zip -r ../../../../${ZIP_NAME} *${ARTIFACT_EXT}
+          cd ../../../../
+          
+          # 파일 크기 계산 (bytes)
+          FILE_SIZE=$(stat -f%z ${ZIP_NAME} 2>/dev/null || stat -c%s ${ZIP_NAME})
+          echo "FILE_SIZE=${FILE_SIZE}" >> $GITHUB_OUTPUT
+          
+          # SHA256 체크섬 생성
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            CHECKSUM=$(shasum -a 256 ${ZIP_NAME} | cut -d ' ' -f 1)
+          else
+            CHECKSUM=$(sha256sum ${ZIP_NAME} | cut -d ' ' -f 1)
+          fi
+          echo "CHECKSUM=${CHECKSUM}" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload to S3
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          OS_TYPE=${{ steps.prepare_artifacts.outputs.OS_TYPE }}
+          ZIP_NAME=${{ steps.prepare_artifacts.outputs.ZIP_NAME }}
+          
+          # S3 경로: s3://your-bucket/releases/v1.0.0/windows/desktop-calendar-1.0.0-windows-x64.zip
+          S3_PATH="s3://${{ secrets.AWS_S3_BUCKET }}/releases/v${VERSION}/${OS_TYPE}/${ZIP_NAME}"
+          
+          aws s3 cp ${ZIP_NAME} ${S3_PATH} --acl public-read
+          
+          # S3 URL 생성
+          S3_URL="https://${{ secrets.AWS_S3_BUCKET }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/releases/v${VERSION}/${OS_TYPE}/${ZIP_NAME}"
+          echo "S3_URL=${S3_URL}" >> $GITHUB_OUTPUT
+        id: s3_upload
+
+      - name: Save release info to database
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          OS_TYPE=${{ steps.prepare_artifacts.outputs.OS_TYPE }}
+          ZIP_NAME=${{ steps.prepare_artifacts.outputs.ZIP_NAME }}
+          FILE_SIZE=${{ steps.prepare_artifacts.outputs.FILE_SIZE }}
+          CHECKSUM=${{ steps.prepare_artifacts.outputs.CHECKSUM }}
+          S3_URL=${{ steps.s3_upload.outputs.S3_URL }}
+          
+          # API 엔드포인트로 릴리스 정보 전송
+          curl -X POST "${{ secrets.API_BASE_URL }}/api/releases" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.API_SECRET_KEY }}" \
+            -d "{
+              \"version\": \"${VERSION}\",
+              \"platform\": \"${OS_TYPE}\",
+              \"fileName\": \"${ZIP_NAME}\",
+              \"downloadUrl\": \"${S3_URL}\",
+              \"fileSize\": ${FILE_SIZE},
+              \"checksum\": \"${CHECKSUM}\",
+              \"releaseNotes\": \"${{ github.event.head_commit.message }}\",
+              \"isPrerelease\": false
+            }"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: matrix.os == 'ubuntu-latest'  # 한 번만 실행
+        with:
+          files: ${{ steps.prepare_artifacts.outputs.ZIP_NAME }}
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: Release v${{ steps.get_version.outputs.VERSION }}
+          body: ${{ github.event.head_commit.message }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

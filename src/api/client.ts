@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+import { fetch } from '@tauri-apps/plugin-http'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://trabien.com'
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'

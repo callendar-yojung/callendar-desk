@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { listen } from '@tauri-apps/api/event'
-import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-shell'
+import { fetch } from '@tauri-apps/plugin-http'
 import { useAuthStore, useThemeStore } from '../../stores'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -14,117 +14,128 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Setup deep link listener for OAuth callbacks
+  useEffect(() => {
+    console.log('🔗 Deep link 리스너 등록 중...')
+
+    let unlisten: (() => void) | null = null
+
+    // Listen for deep link callback from backend
+    listen<string>('tauri://deep-link', (event) => {
+      console.log('📥 Deep link 수신:', event.payload)
+
+      try {
+        const url = new URL(event.payload)
+
+        // deskcal://auth/callback 체크
+        if (url.hostname !== 'auth' || url.pathname !== '/callback') {
+          console.log('❌ 잘못된 deep link 경로:', url.hostname, url.pathname)
+          return
+        }
+
+        // 백엔드에서 보낸 파라미터 추출
+        const accessToken = url.searchParams.get('accessToken')
+        const refreshToken = url.searchParams.get('refreshToken')
+        const memberId = url.searchParams.get('memberId')
+        const nickname = url.searchParams.get('nickname')
+        const email = url.searchParams.get('email')
+        const errorParam = url.searchParams.get('error')
+
+        // 에러 처리
+        if (errorParam) {
+          console.error('❌ 로그인 에러:', errorParam)
+          setError(`Login failed: ${errorParam}`)
+          setIsLoading(false)
+          return
+        }
+
+        // 필수 파라미터 체크
+        if (!accessToken || !refreshToken || !memberId) {
+          console.error('❌ 필수 파라미터 누락:', { accessToken: !!accessToken, refreshToken: !!refreshToken, memberId: !!memberId })
+          setError('Invalid login response: missing required parameters')
+          setIsLoading(false)
+          return
+        }
+
+        console.log('✅ 로그인 성공:', {
+          memberId,
+          nickname,
+          email: email || 'N/A'
+        })
+
+        // Member 객체 생성 및 인증 설정
+        setAuth(
+          {
+            memberId: Number(memberId),
+            nickname: nickname || 'User',
+            email: email || undefined,
+            provider: 'kakao'
+          },
+          accessToken,
+          refreshToken,
+        )
+
+        setError(null)
+        setIsLoading(false)
+      } catch (err) {
+        console.error('❌ Deep link 파싱 에러:', err)
+        setError('Failed to process login callback')
+        setIsLoading(false)
+      }
+    }).then((unlistenFn) => {
+      unlisten = unlistenFn
+      console.log('✅ Deep link 리스너 등록 완료')
+    })
+
+    return () => {
+      if (unlisten) {
+        unlisten()
+        console.log('🔗 Deep link 리스너 해제')
+      }
+    }
+  }, [setAuth])
+
   const handleKakaoLogin = async () => {
     console.log('🚀 카카오 로그인 시작')
     setIsLoading(true)
     setError(null)
 
     try {
-      // 1. Start OAuth server via Tauri command
-      console.log('📡 OAuth 서버 시작 중...')
-      const port = await invoke<number>('start_oauth_server')
-      console.log('✅ OAuth 서버 시작 완료. 포트:', port)
-
-      // 2. Listen for the redirect URL from the OAuth server
-      console.log('👂 OAuth 콜백 리스너 등록 중...')
-      const unlisten = await listen<string>('oauth://url', async (event) => {
-        console.log('📥 OAuth 콜백 수신:', event.payload)
-
-        try {
-          const redirectUrl = event.payload
-          const url = new URL(redirectUrl)
-          const code = url.searchParams.get('code')
-
-          console.log('🔑 인증 코드 추출:', { hasCode: !!code })
-
-          if (!code) {
-            console.error('❌ 인증 코드 없음')
-            setError('Missing authorization code in OAuth callback')
-            setIsLoading(false)
-            unlisten()
-            return
-          }
-
-          // 3. 백엔드로 인증 코드 전송하여 토큰 받기
-          console.log('📡 백엔드로 인증 코드 전송 중...')
-          const callbackResponse = await fetch(
-            `${API_BASE_URL}/api/auth/kakao/callback?code=${encodeURIComponent(code)}`,
-          )
-
-          console.log('📥 백엔드 콜백 응답 상태:', callbackResponse.status)
-
-          if (!callbackResponse.ok) {
-            const errorText = await callbackResponse.text()
-            console.error('❌ 백엔드 콜백 에러:', errorText)
-            throw new Error('Failed to process authentication')
-          }
-
-          const authData = await callbackResponse.json()
-          console.log('✅ 인증 데이터 받음:', {
-            hasAccessToken: !!authData.accessToken,
-            hasRefreshToken: !!authData.refreshToken,
-            member: authData.member,
-          })
-
-          if (!authData.accessToken || !authData.refreshToken || !authData.member) {
-            console.error('❌ 토큰 또는 멤버 정보 없음')
-            throw new Error('Invalid authentication response')
-          }
-
-          // 4. Zustand store에 인증 정보 저장
-          console.log('💾 인증 정보 저장 중...')
-          setAuth(authData.member, authData.accessToken, authData.refreshToken)
-          console.log('✅ 로그인 성공!')
-
-          setError(null)
-        } catch (err) {
-          console.error('❌ OAuth 콜백 처리 실패:', err)
-          setError('Login succeeded but failed to process authentication')
-        } finally {
-          setIsLoading(false)
-          unlisten()
-        }
-      })
-      console.log('✅ 리스너 등록 완료')
-
-      // 4. Get auth URL from backend, passing the localhost redirect port
+      // 백엔드에서 OAuth URL 가져오기
       console.log('📡 백엔드에서 OAuth URL 요청 중...')
-      const redirectUri = `http://localhost:${port}`
-      console.log('🔗 Redirect URI:', redirectUri)
-
       const response = await fetch(
-        `${API_BASE_URL}/api/auth/kakao/start?callback=${encodeURIComponent(redirectUri)}`,
+        `${API_BASE_URL}/api/auth/kakao/start?callback=${encodeURIComponent(
+          'deskcal://auth/callback',
+        )}`,
       )
 
-      console.log('📥 백엔드 응답 상태:', response.status)
-
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ 백엔드 에러:', errorText)
-        throw new Error(`Backend returned ${response.status}`)
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || `Backend returned ${response.status}`)
       }
 
-      const data = await response.json()
-      console.log('✅ OAuth 응답 받음:', data)
+      const { authUrl } = await response.json()
 
-      const authUrl = data.authUrl
-      if (!authUrl || typeof authUrl !== 'string') {
-        console.error('❌ 유효하지 않은 OAuth URL:', data)
-        throw new Error('No auth URL received from backend')
+      if (!authUrl) {
+        throw new Error('No authUrl in response')
       }
 
-      // 5. Open Kakao OAuth URL with Tauri shell API
-      console.log('🌐 시스템 브라우저 오픈 시도:', authUrl)
+      // 카카오 로그인 페이지 열기
+      console.log('🌐 카카오 로그인 페이지 열기:', authUrl)
       try {
         await open(authUrl)
-        console.log('✅ 브라우저 오픈 완료. 사용자 로그인 대기 중...')
-      } catch (openErr) {
-        console.error('❌ 브라우저 오픈 실패:', openErr)
-        throw new Error('Failed to open browser')
+        console.log('✅ 브라우저 오픈 완료. 로그인 대기 중...')
+      } catch (openError) {
+        console.error('❌ open() 실패:', openError)
+        // fallback: window.open 시도
+        console.log('🔄 window.open으로 fallback 시도...')
+        window.open(authUrl, '_blank')
       }
     } catch (err) {
-      console.error('❌ Kakao login error:', err)
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
+      console.error('❌ 로그인 실패:', err)
+      console.error('에러 타입:', typeof err)
+      console.error('에러 전체:', JSON.stringify(err, Object.getOwnPropertyNames(err as object), 2))
+      const errorMessage = err instanceof Error ? err.message : String(err)
       setError(`${t('auth.loginFailed')} (${errorMessage})`)
       setIsLoading(false)
     }

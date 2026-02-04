@@ -1,23 +1,22 @@
 mod position;
-mod oauth;
 
 #[cfg(target_os = "windows")]
 mod desktop_attach;
 #[cfg(target_os = "windows")]
 mod autostart;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+use tauri_plugin_deep_link::DeepLinkExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
 
-    // ── Register Tauri commands ────────────────────────────────────────
+    // ── Tauri commands ──────────────────────────────────────────────
     #[cfg(target_os = "windows")]
     {
         builder = builder.invoke_handler(tauri::generate_handler![
             position::save_window_position,
-            oauth::start_oauth_server,
             autostart::set_autostart,
             autostart::get_autostart,
         ]);
@@ -27,46 +26,50 @@ pub fn run() {
     {
         builder = builder.invoke_handler(tauri::generate_handler![
             position::save_window_position,
-            oauth::start_oauth_server,
         ]);
     }
 
     builder
-        .plugin(tauri_plugin_oauth::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_http::init())
         .setup(|app| {
-            // Logging (debug only)
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
+            // Logging
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Debug)
+                    .build(),
+            )?;
 
             let handle = app.handle().clone();
 
-            // ── Restore saved window position ──────────────────────────
-            position::restore_position(&handle);
+            // ── Deep Link handler ──────────────────────────────────────
+            app.deep_link().on_open_url(move |event| {
+                if let Some(url) = event.urls().first() {
+                    let url_str = url.to_string();
+                    println!("🔗 Deep link received: {}", url_str);
+                    let _ = handle.emit("tauri://deep-link", url_str);
+                }
+            });
 
-            // ── Windows-only: desktop attachment + auto-start ──────────
+            // ── Restore window position ────────────────────────────────
+            position::restore_position(app.handle());
+
+            // ── Windows-only: desktop attach + autostart ───────────────
             #[cfg(target_os = "windows")]
             {
-                // Attach to desktop layer (behind icons, no taskbar/alt-tab)
-                if let Some(window) = handle.get_webview_window("main") {
+                if let Some(window) = app.handle().get_webview_window("main") {
                     if let Ok(hwnd) = window.hwnd() {
                         desktop_attach::attach_to_desktop(hwnd.0 as isize);
                     }
                 }
-
-                // Enable auto-start on first run (idempotent)
                 autostart::enable_autostart();
             }
 
-            // ── Save position when window moves ────────────────────────
-            if let Some(window) = handle.get_webview_window("main") {
-                let app_handle = handle.clone();
+            // ── Save position on window move ───────────────────────────
+            if let Some(window) = app.handle().get_webview_window("main") {
+                let app_handle = app.handle().clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::Moved(pos) = event {
                         let wp = position::WindowPosition {
