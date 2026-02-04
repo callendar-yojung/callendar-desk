@@ -7,6 +7,8 @@
 ///   3. `SetParent(our_hwnd, workerw)` to embed our window.
 ///   4. Strip `WS_EX_APPWINDOW` / add `WS_EX_TOOLWINDOW` so it disappears
 ///      from the taskbar and Alt+Tab.
+use std::ptr::null_mut;
+
 #[cfg(target_os = "windows")]
 pub fn attach_to_desktop(hwnd: isize) {
     use windows::core::PCSTR;
@@ -37,7 +39,7 @@ pub fn attach_to_desktop(hwnd: isize) {
         );
 
         // Walk top-level windows to find the WorkerW that sits behind SHELLDLL_DefView.
-        let mut workerw = HWND::default();
+        let mut workerw = HWND(null_mut());
 
         let _ = EnumWindows(
             Some(enum_callback),
@@ -73,15 +75,18 @@ unsafe extern "system" fn enum_callback(
     use windows::core::PCSTR;
     use windows::Win32::Foundation::BOOL;
     use windows::Win32::UI::WindowsAndMessaging::FindWindowExA;
+    use windows::Win32::Foundation::HWND;
+    use std::ptr::null_mut;
+
 
     let class_name = PCSTR(b"SHELLDLL_DefView\0".as_ptr());
-    let shell = FindWindowExA(hwnd, HWND::default(), class_name, PCSTR::null());
+    let shell = FindWindowExA(hwnd, HWND(null_mut()), class_name, PCSTR::null());
 
     if let Ok(shell) = shell {
         if !shell.0.is_null() {
             // The WorkerW we want is the *next* sibling of this window.
             let worker_class = PCSTR(b"WorkerW\0".as_ptr());
-            let next = FindWindowExA(HWND::default(), hwnd, worker_class, PCSTR::null());
+            let next = FindWindowExA(HWND(null_mut()), hwnd, worker_class, PCSTR::null());
             if let Ok(next) = next {
                 let out = &mut *(lparam.0 as *mut windows::Win32::Foundation::HWND);
                 *out = next;
