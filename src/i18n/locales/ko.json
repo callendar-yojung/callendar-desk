@@ -60,5 +60,16 @@
   "common.error": "오류가 발생했습니다",
   "common.noData": "데이터가 없습니다",
   "theme.light": "라이트",
-  "theme.dark": "다크"
+  "theme.dark": "다크",
+  "autostart.label": "컴퓨터 시작 시 자동 실행",
+  "autostart.enable": "자동 실행 켜기",
+  "autostart.disable": "자동 실행 끄기",
+  "settings.title": "설정",
+  "settings.profile": "프로필",
+  "settings.system": "시스템 설정",
+  "settings.theme": "테마",
+  "settings.language": "언어",
+  "settings.editNickname": "닉네임 수정",
+  "settings.provider": "로그인 방식",
+  "settings.memberId": "회원 번호"
 }

@@ -15,6 +15,7 @@ export function WorkspaceList() {
     selectedWorkspaceId,
     selectWorkspace,
     addWorkspace,
+    updateWorkspaceInStore,
     removeWorkspace,
     isLoading,
   } = useWorkspaceStore()
@@ -23,7 +24,10 @@ export function WorkspaceList() {
   const [name, setName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editName, setEditName] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const editInputRef = useRef<HTMLInputElement>(null)
 
   /** 워크스페이스 생성 */
   const createWorkspace = async () => {
@@ -96,6 +100,35 @@ export function WorkspaceList() {
     }
   }
 
+  /** 워크스페이스 이름 수정 */
+  const startEditing = (workspaceId: number, currentName: string) => {
+    setEditingId(workspaceId)
+    setEditName(currentName)
+  }
+
+  const submitRename = async () => {
+    if (!editingId || !editName.trim()) {
+      setEditingId(null)
+      return
+    }
+    try {
+      await workspaceApi.updateWorkspace(editingId, editName.trim())
+      updateWorkspaceInStore(editingId, editName.trim())
+    } catch (e) {
+      console.error('Failed to rename workspace:', e)
+    } finally {
+      setEditingId(null)
+    }
+  }
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      submitRename()
+    } else if (e.key === 'Escape') {
+      setEditingId(null)
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       createWorkspace()
@@ -110,6 +143,13 @@ export function WorkspaceList() {
       inputRef.current?.focus()
     }
   }, [isAdding])
+
+  useEffect(() => {
+    if (editingId) {
+      editInputRef.current?.focus()
+      editInputRef.current?.select()
+    }
+  }, [editingId])
 
   const getModeTitle = () => {
     if (currentMode === 'PERSONAL') {
@@ -195,20 +235,44 @@ export function WorkspaceList() {
                               : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                       }`}
                   >
-                    <button
-                        onClick={() => selectWorkspace(ws.workspace_id)}
-                        className="flex-1 flex items-center gap-2 text-left"
-                    >
-                      <div
+                    {editingId === ws.workspace_id ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <div
                           className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                              ws.type === 'personal' ? 'bg-green-500' : 'bg-purple-500'
+                            ws.type === 'personal' ? 'bg-green-500' : 'bg-purple-500'
                           }`}
-                      />
-                      <span className="truncate">{ws.name}</span>
-                    </button>
+                        />
+                        <input
+                          ref={editInputRef}
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={handleEditKeyDown}
+                          onBlur={submitRename}
+                          className="flex-1 px-1.5 py-0.5 text-sm border border-blue-400 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => selectWorkspace(ws.workspace_id)}
+                        onDoubleClick={(e) => {
+                          e.preventDefault()
+                          startEditing(ws.workspace_id, ws.name)
+                        }}
+                        className="flex-1 flex items-center gap-2 text-left"
+                      >
+                        <div
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                            ws.type === 'personal' ? 'bg-green-500' : 'bg-purple-500'
+                          }`}
+                        />
+                        <span className="truncate">{ws.name}</span>
+                      </button>
+                    )}
 
                     {/* 삭제 버튼 */}
-                    <button
+                    {editingId !== ws.workspace_id && (
+                      <button
                         onClick={(e) => {
                           e.stopPropagation()
                           deleteWorkspace(ws.workspace_id, ws.name)
@@ -216,15 +280,16 @@ export function WorkspaceList() {
                         disabled={deletingId === ws.workspace_id}
                         className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all disabled:opacity-50"
                         title={t('workspace.delete')}
-                    >
-                      {deletingId === ws.workspace_id ? (
-                        <div className="w-3 h-3 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      )}
-                    </button>
+                      >
+                        {deletingId === ws.workspace_id ? (
+                          <div className="w-3 h-3 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                      </button>
+                    )}
                   </div>
               ))}
             </div>

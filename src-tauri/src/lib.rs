@@ -168,7 +168,7 @@ pub fn run() {
                 }
             }
 
-            // ── Windows-only: desktop attach + autostart + deep link ───
+            // ── Windows-only: desktop attach + deep link ─────────────
             #[cfg(target_os = "windows")]
             {
                 if let Some(window) = app.handle().get_webview_window("main") {
@@ -176,7 +176,6 @@ pub fn run() {
                         desktop_attach::attach_to_desktop(hwnd.0 as isize);
                     }
                 }
-                autostart::enable_autostart();
                 autostart::register_deep_link_scheme();
             }
 

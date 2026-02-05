@@ -53,7 +53,8 @@
       },
       "nsis": {
         "languages": ["Korean", "English"],
-        "displayLanguageSelector": true
+        "displayLanguageSelector": true,
+        "installerHooks": "nsis-hooks.nsh"
       }
     },
     "macOS": {

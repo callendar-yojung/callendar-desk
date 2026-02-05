@@ -59,5 +59,16 @@
   "common.error": "An error occurred",
   "common.noData": "No data available",
   "theme.light": "Light",
-  "theme.dark": "Dark"
+  "theme.dark": "Dark",
+  "autostart.label": "Start with Windows",
+  "autostart.enable": "Enable autostart",
+  "autostart.disable": "Disable autostart",
+  "settings.title": "Settings",
+  "settings.profile": "Profile",
+  "settings.system": "System",
+  "settings.theme": "Theme",
+  "settings.language": "Language",
+  "settings.editNickname": "Edit nickname",
+  "settings.provider": "Login provider",
+  "settings.memberId": "Member ID"
 }

@@ -11,6 +11,7 @@ interface AuthState {
   isLoading: boolean
 
   setAuth: (user: Member, accessToken: string, refreshToken: string) => void
+  updateUser: (partial: Partial<Member>) => void
   logout: () => void
   setLoading: (loading: boolean) => void
 }
@@ -34,6 +35,11 @@ export const useAuthStore = create<AuthState>()(
           isLoading: false,
         })
       },
+
+      updateUser: (partial) =>
+        set((state) => ({
+          user: state.user ? { ...state.user, ...partial } : null,
+        })),
 
       logout: () => {
         apiClient.setAccessToken(null)

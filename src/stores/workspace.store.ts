@@ -46,8 +46,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   setWorkspaces: (workspaces) =>
       set((state) => {
-        // 워크스페이스 목록만 업데이트하고 자동 선택하지 않음
-        return { workspaces }
+        // 현재 선택이 새 목록에 있으면 유지, 아니면 첫 번째 자동 선택
+        const stillExists = state.selectedWorkspaceId != null
+          && workspaces.some((ws) => ws.workspace_id === state.selectedWorkspaceId)
+        const selectedWorkspaceId = stillExists
+          ? state.selectedWorkspaceId
+          : workspaces.length > 0 ? workspaces[0].workspace_id : null
+        return { workspaces, selectedWorkspaceId }
       }),
 
   selectWorkspace: (workspaceId) => set({ selectedWorkspaceId: workspaceId }),

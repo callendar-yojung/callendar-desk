@@ -77,8 +77,11 @@ export function CalendarGrid() {
           return (
             <div
               key={day.toISOString()}
-              className={`min-h-[100px] p-2 bg-white dark:bg-gray-900 ${
-                !isCurrentMonth ? 'opacity-40' : ''
+              onClick={() => isCurrentMonth && openCreateModal(day)}
+              className={`group min-h-[100px] p-2 transition-colors ${
+                isCurrentMonth
+                  ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer'
+                  : 'bg-white dark:bg-gray-900 opacity-40'
               }`}
             >
               <div className="flex items-center justify-between mb-1">
@@ -96,24 +99,11 @@ export function CalendarGrid() {
                   {format(day, 'd')}
                 </span>
                 {isCurrentMonth && (
-                  <button
-                    onClick={() => openCreateModal(day)}
-                    className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-blue-500 transition-colors opacity-0 hover:opacity-100 group-hover:opacity-100"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 4v16m8-8H4"
-                      />
+                  <span className="w-5 h-5 flex items-center justify-center rounded-full text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
-                  </button>
+                  </span>
                 )}
               </div>
 
@@ -121,7 +111,10 @@ export function CalendarGrid() {
                 {dayEvents.map((event) => (
                   <button
                     key={event.id}
-                    onClick={() => openDetailModal(event)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openDetailModal(event)
+                    }}
                     className="w-full text-left px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded truncate hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
                   >
                     {event.title}

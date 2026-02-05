@@ -45,6 +45,13 @@ export function TitleBar() {
   const handleMinimize = () => appWindow.minimize()
   const handleClose = () => appWindow.close()
 
+  // 타이틀바 빈 영역 드래그로 창 이동
+  const handleTitleBarMouseDown = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest('button') || target.closest('input')) return
+    appWindow.startDragging()
+  }
+
   const handleToggleDesktopMode = async () => {
     try {
       const newState = await invoke<boolean>('toggle_desktop_mode')
@@ -57,7 +64,8 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="h-8 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm flex items-center justify-between px-2 select-none border-b border-gray-200 dark:border-gray-700"
+      onMouseDown={handleTitleBarMouseDown}
+      className="h-8 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm flex items-center justify-between px-2 select-none border-b border-gray-200 dark:border-gray-700 cursor-move"
     >
       {/* 왼쪽: 앱 타이틀 */}
       <div
@@ -77,18 +85,6 @@ export function TitleBar() {
 
       {/* 오른쪽: 컨트롤 버튼들 */}
       <div className="flex items-center gap-0.5">
-        {/* 이동 */}
-        <button
-          onMouseDown={() => appWindow.startDragging()}
-          className="p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors cursor-move"
-          title="위치 이동"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
-          </svg>
-        </button>
-
         {/* 투명도 토글 + 슬라이더 */}
         <div className="relative flex items-center" ref={sliderRef}>
           <button

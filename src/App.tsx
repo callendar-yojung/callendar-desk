@@ -7,6 +7,7 @@ import {
   EventEditModal,
   EventCreateModal,
   TeamCreateModal,
+  SettingsModal,
 } from './components/modals'
 import { LoginPage } from './components/auth'
 import { useWorkspaces } from './hooks'
@@ -29,6 +30,7 @@ function AppContent() {
       <EventEditModal />
       <EventCreateModal />
       <TeamCreateModal />
+      <SettingsModal />
     </div>
   )
 }

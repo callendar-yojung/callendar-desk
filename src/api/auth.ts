@@ -19,4 +19,7 @@ export const authApi = {
     }),
 
   getMe: () => apiClient.get<MeResponse>('/api/auth/external/me'),
+
+  updateAccount: (data: { nickname?: string }) =>
+    apiClient.patch<{ success: boolean }>('/api/me/account', data),
 }
