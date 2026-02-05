@@ -132,4 +132,4 @@ export interface MeResponse {
 export type Mode = 'PERSONAL' | 'TEAM'
 
 // Modal type
-export type ModalType = 'DETAIL' | 'EDIT' | 'CREATE' | null
+export type ModalType = 'DETAIL' | 'EDIT' | 'CREATE' | 'TEAM_CREATE' | null

@@ -16,8 +16,18 @@
       {
         "label": "main",
         "title": "Desktop Calendar",
-        "width": 1000,
-        "height": 700,
+        "width": 780,
+        "height": 660,
+        "minWidth": 640,
+        "minHeight": 480,
+        "x": 100,
+        "y": 100,
+        "resizable": true,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": true,
+        "visible": true,
         "devtools": true
       }
     ],
@@ -35,7 +45,17 @@
       "icons/icon.ico"
     ],
     "active": true,
-    "targets": "all",
+    "targets": ["msi", "nsis"],
+    "windows": {
+      "wix": {
+        "language": "ko-KR",
+        "upgradeCode": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      },
+      "nsis": {
+        "languages": ["Korean", "English"],
+        "displayLanguageSelector": true
+      }
+    },
     "macOS": {
       "entitlements": "Entitlements.plist",
       "signingIdentity": "-",

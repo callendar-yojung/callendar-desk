@@ -14,15 +14,16 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Setup deep link listener for OAuth callbacks
+  // Deep link 리스너 설정
   useEffect(() => {
     console.log('🔗 Deep link 리스너 등록 중...')
+    let unlistenFn: (() => void) | null = null
 
-    let unlisten: (() => void) | null = null
-
-    // Listen for deep link callback from backend
-    listen<string>('tauri://deep-link', (event) => {
+    // 비동기로 리스너 등록
+    listen<string>('deep-link://new-url', (event) => {
+      console.log('═══════════════════════════════════════════════════')
       console.log('📥 Deep link 수신:', event.payload)
+      console.log('═══════════════════════════════════════════════════')
 
       try {
         const url = new URL(event.payload)
@@ -51,7 +52,11 @@ export function LoginPage() {
 
         // 필수 파라미터 체크
         if (!accessToken || !refreshToken || !memberId) {
-          console.error('❌ 필수 파라미터 누락:', { accessToken: !!accessToken, refreshToken: !!refreshToken, memberId: !!memberId })
+          console.error('❌ 필수 파라미터 누락:', {
+            accessToken: !!accessToken,
+            refreshToken: !!refreshToken,
+            memberId: !!memberId,
+          })
           setError('Invalid login response: missing required parameters')
           setIsLoading(false)
           return
@@ -60,7 +65,7 @@ export function LoginPage() {
         console.log('✅ 로그인 성공:', {
           memberId,
           nickname,
-          email: email || 'N/A'
+          email: email || 'N/A',
         })
 
         // Member 객체 생성 및 인증 설정
@@ -69,10 +74,10 @@ export function LoginPage() {
             memberId: Number(memberId),
             nickname: nickname || 'User',
             email: email || undefined,
-            provider: 'kakao'
+            provider: 'kakao',
           },
           accessToken,
-          refreshToken,
+          refreshToken
         )
 
         setError(null)
@@ -82,14 +87,16 @@ export function LoginPage() {
         setError('Failed to process login callback')
         setIsLoading(false)
       }
-    }).then((unlistenFn) => {
-      unlisten = unlistenFn
+    }).then((fn) => {
+      unlistenFn = fn
       console.log('✅ Deep link 리스너 등록 완료')
+    }).catch((err) => {
+      console.error('❌ Deep link 리스너 등록 실패:', err)
     })
 
     return () => {
-      if (unlisten) {
-        unlisten()
+      if (unlistenFn) {
+        unlistenFn()
         console.log('🔗 Deep link 리스너 해제')
       }
     }
@@ -103,10 +110,13 @@ export function LoginPage() {
     try {
       // 백엔드에서 OAuth URL 가져오기
       console.log('📡 백엔드에서 OAuth URL 요청 중...')
+      
+      // deskcal:// 스킴 콜백 URL 전달
+      const callbackUrl = 'deskcal://auth/callback'
+      console.log('🔗 Callback URL:', callbackUrl)
+      
       const response = await fetch(
-        `${API_BASE_URL}/api/auth/kakao/start?callback=${encodeURIComponent(
-          'deskcal://auth/callback',
-        )}`,
+        `${API_BASE_URL}/api/auth/kakao/start?callback=${encodeURIComponent(callbackUrl)}`
       )
 
       if (!response.ok) {
@@ -127,14 +137,11 @@ export function LoginPage() {
         console.log('✅ 브라우저 오픈 완료. 로그인 대기 중...')
       } catch (openError) {
         console.error('❌ open() 실패:', openError)
-        // fallback: window.open 시도
         console.log('🔄 window.open으로 fallback 시도...')
         window.open(authUrl, '_blank')
       }
     } catch (err) {
       console.error('❌ 로그인 실패:', err)
-      console.error('에러 타입:', typeof err)
-      console.error('에러 전체:', JSON.stringify(err, Object.getOwnPropertyNames(err as object), 2))
       const errorMessage = err instanceof Error ? err.message : String(err)
       setError(`${t('auth.loginFailed')} (${errorMessage})`)
       setIsLoading(false)
@@ -183,7 +190,10 @@ export function LoginPage() {
           {isLoading && (
             <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
               <p className="text-sm text-blue-600 dark:text-blue-400 text-center">
-                {t('auth.waitingForBrowser', 'Browser opened. Complete login and return to the app...')}
+                {t(
+                  'auth.waitingForBrowser',
+                  'Browser opened. Complete login and return to the app...'
+                )}
               </p>
             </div>
           )}

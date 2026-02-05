@@ -9,6 +9,7 @@ interface ModalState {
   openDetailModal: (event: Task) => void
   openEditModal: (event: Task) => void
   openCreateModal: (date: Date) => void
+  openTeamCreateModal: () => void
   closeModal: () => void
 }
 
@@ -23,6 +24,8 @@ export const useModalStore = create<ModalState>((set) => ({
     set({ openedModal: 'EDIT', selectedEvent: event, createDate: null }),
   openCreateModal: (date) =>
     set({ openedModal: 'CREATE', selectedEvent: null, createDate: date }),
+  openTeamCreateModal: () =>
+    set({ openedModal: 'TEAM_CREATE', selectedEvent: null, createDate: null }),
   closeModal: () =>
     set({ openedModal: null, selectedEvent: null, createDate: null }),
 }))

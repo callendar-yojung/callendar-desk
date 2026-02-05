@@ -1,98 +1,167 @@
-/// Win32 Desktop Attachment — embed the Tauri window into the Windows desktop
-/// layer (behind icons, no taskbar entry, no Alt+Tab).
-///
-/// Technique:
-///   1. Send `0x052C` to Progman so the shell spawns a WorkerW behind icons.
-///   2. Find that WorkerW (the one whose child is SHELLDLL_DefView).
-///   3. `SetParent(our_hwnd, workerw)` to embed our window.
-///   4. Strip `WS_EX_APPWINDOW` / add `WS_EX_TOOLWINDOW` so it disappears
-///      from the taskbar and Alt+Tab.
-use std::ptr::null_mut;
+/// Win32 Desktop Attachment — 바탕화면 위젯 (항상 최하위 Z-order)
 
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+
+static IS_DESKTOP_MODE: AtomicBool = AtomicBool::new(false);
+static ORIGINAL_EXSTYLE: AtomicIsize = AtomicIsize::new(0);
+static KEEP_BOTTOM: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{HWND, COLORREF};
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::WindowsAndMessaging::*;
+
+/// 바탕화면에 고정 (항상 최하위 Z-order, 작업표시줄/Alt+Tab 숨김)
 #[cfg(target_os = "windows")]
 pub fn attach_to_desktop(hwnd: isize) {
-    use windows::core::PCSTR;
-    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, FindWindowA, FindWindowExA, GetWindowLongA, SendMessageTimeoutA,
-        SetParent, SetWindowLongA, GWL_EXSTYLE, SMTO_NORMAL, WS_EX_APPWINDOW,
-        WS_EX_TOOLWINDOW,
-    };
+    if IS_DESKTOP_MODE.load(Ordering::SeqCst) {
+        return;
+    }
 
     unsafe {
-        let progman = FindWindowA(PCSTR(b"Progman\0".as_ptr()), PCSTR::null());
-        if progman.is_err() || progman.as_ref().unwrap().0.is_null() {
-            log::error!("desktop_attach: Progman window not found");
-            return;
-        }
-        let progman = progman.unwrap();
+        let our = HWND(hwnd as *mut _);
 
-        // Ask Progman to spawn a WorkerW behind the desktop icons.
-        let _ = SendMessageTimeoutA(
-            progman,
-            0x052C,
-            WPARAM(0),
-            LPARAM(0),
-            SMTO_NORMAL,
-            1000,
-            None,
+        // 원래 스타일 저장
+        ORIGINAL_EXSTYLE.store(
+            GetWindowLongA(our, GWL_EXSTYLE) as isize,
+            Ordering::SeqCst,
         );
 
-        // Walk top-level windows to find the WorkerW that sits behind SHELLDLL_DefView.
-        let mut workerw = HWND(null_mut());
+        // 스타일 변경: 작업표시줄/Alt+Tab에서 숨김
+        let ex = GetWindowLongA(our, GWL_EXSTYLE);
+        let new_ex = (ex & !(WS_EX_APPWINDOW.0 as i32)) | (WS_EX_TOOLWINDOW.0 as i32);
+        SetWindowLongA(our, GWL_EXSTYLE, new_ex);
 
-        let _ = EnumWindows(
-            Some(enum_callback),
-            LPARAM(&mut workerw as *mut HWND as isize),
+        // Z-order 맨 아래로
+        let _ = SetWindowPos(
+            our,
+            HWND_BOTTOM,
+            0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
 
-        if workerw.0.is_null() {
-            log::error!("desktop_attach: WorkerW not found");
-            return;
-        }
+        IS_DESKTOP_MODE.store(true, Ordering::SeqCst);
+        KEEP_BOTTOM.store(true, Ordering::SeqCst);
 
-        let our_hwnd = HWND(hwnd as *mut _);
-
-        // Embed our window into the desktop WorkerW.
-        let _ = SetParent(our_hwnd, workerw);
-
-        // Hide from taskbar + Alt+Tab.
-        let ex_style = GetWindowLongA(our_hwnd, GWL_EXSTYLE);
-        let new_style = (ex_style & !(WS_EX_APPWINDOW.0 as i32))
-            | (WS_EX_TOOLWINDOW.0 as i32);
-        let _ = SetWindowLongA(our_hwnd, GWL_EXSTYLE, new_style);
-
-        log::info!("desktop_attach: window attached to desktop layer");
-    }
-}
-
-/// EnumWindows callback — finds the WorkerW whose child is SHELLDLL_DefView.
-#[cfg(target_os = "windows")]
-unsafe extern "system" fn enum_callback(
-    hwnd: windows::Win32::Foundation::HWND,
-    lparam: windows::Win32::Foundation::LPARAM,
-) -> windows::Win32::Foundation::BOOL {
-    use windows::core::PCSTR;
-    use windows::Win32::Foundation::BOOL;
-    use windows::Win32::UI::WindowsAndMessaging::FindWindowExA;
-    use windows::Win32::Foundation::HWND;
-    use std::ptr::null_mut;
-
-
-    let class_name = PCSTR(b"SHELLDLL_DefView\0".as_ptr());
-    let shell = FindWindowExA(hwnd, HWND(null_mut()), class_name, PCSTR::null());
-
-    if let Ok(shell) = shell {
-        if !shell.0.is_null() {
-            // The WorkerW we want is the *next* sibling of this window.
-            let worker_class = PCSTR(b"WorkerW\0".as_ptr());
-            let next = FindWindowExA(HWND(null_mut()), hwnd, worker_class, PCSTR::null());
-            if let Ok(next) = next {
-                let out = &mut *(lparam.0 as *mut windows::Win32::Foundation::HWND);
-                *out = next;
+        // 백그라운드 스레드: 항상 최하위 Z-order 유지
+        std::thread::spawn(move || {
+            while KEEP_BOTTOM.load(Ordering::SeqCst) {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                if KEEP_BOTTOM.load(Ordering::SeqCst) {
+                    let w = HWND(hwnd as *mut _);
+                    let _ = SetWindowPos(
+                        w,
+                        HWND_BOTTOM,
+                        0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                    );
+                }
             }
-            return BOOL(0); // stop enumerating
+        });
+    }
+}
+
+/// 바탕화면 고정 해제
+#[cfg(target_os = "windows")]
+pub fn detach_from_desktop(hwnd: isize) {
+    if !IS_DESKTOP_MODE.load(Ordering::SeqCst) {
+        return;
+    }
+
+    // 백그라운드 스레드 중지
+    KEEP_BOTTOM.store(false, Ordering::SeqCst);
+
+    unsafe {
+        let our = HWND(hwnd as *mut _);
+
+        // 스타일 복원
+        let saved = ORIGINAL_EXSTYLE.load(Ordering::SeqCst) as i32;
+        if saved != 0 {
+            SetWindowLongA(our, GWL_EXSTYLE, saved);
+        } else {
+            let ex = GetWindowLongA(our, GWL_EXSTYLE);
+            let new_ex = (ex | (WS_EX_APPWINDOW.0 as i32)) & !(WS_EX_TOOLWINDOW.0 as i32);
+            SetWindowLongA(our, GWL_EXSTYLE, new_ex);
+        }
+
+        // 일반 Z-order로 복원
+        let _ = SetWindowPos(
+            our,
+            HWND_NOTOPMOST,
+            0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW,
+        );
+
+        IS_DESKTOP_MODE.store(false, Ordering::SeqCst);
+    }
+}
+
+// ── Tauri Commands ──────────────────────────────────────────────
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn toggle_desktop_mode(window: tauri::Window) -> bool {
+    if let Ok(hwnd) = window.hwnd() {
+        let h = hwnd.0 as isize;
+        if IS_DESKTOP_MODE.load(Ordering::SeqCst) {
+            detach_from_desktop(h);
+        } else {
+            attach_to_desktop(h);
         }
     }
-    BOOL(1) // continue
+    IS_DESKTOP_MODE.load(Ordering::SeqCst)
 }
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn is_desktop_mode() -> bool {
+    IS_DESKTOP_MODE.load(Ordering::SeqCst)
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn set_desktop_mode(window: tauri::Window, enabled: bool) -> bool {
+    if let Ok(hwnd) = window.hwnd() {
+        let h = hwnd.0 as isize;
+        let cur = IS_DESKTOP_MODE.load(Ordering::SeqCst);
+        if enabled && !cur { attach_to_desktop(h); }
+        else if !enabled && cur { detach_from_desktop(h); }
+    }
+    IS_DESKTOP_MODE.load(Ordering::SeqCst)
+}
+
+/// 윈도우 투명도 설정 (0.0 = 완전 투명, 1.0 = 불투명)
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn set_window_opacity(window: tauri::Window, opacity: f64) {
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe {
+            let our = HWND(hwnd.0 as *mut _);
+            // WS_EX_LAYERED 스타일 추가
+            let ex = GetWindowLongA(our, GWL_EXSTYLE);
+            if ex & (WS_EX_LAYERED.0 as i32) == 0 {
+                SetWindowLongA(our, GWL_EXSTYLE, ex | WS_EX_LAYERED.0 as i32);
+            }
+            let alpha = (opacity.clamp(0.0, 1.0) * 255.0) as u8;
+            let _ = SetLayeredWindowAttributes(our, COLORREF(0), alpha, LWA_ALPHA);
+        }
+    }
+}
+
+// ── Non-Windows stubs ───────────────────────────────────────────
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn toggle_desktop_mode(_window: tauri::Window) -> bool { false }
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn is_desktop_mode() -> bool { false }
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn set_desktop_mode(_window: tauri::Window, _enabled: bool) -> bool { false }
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub fn set_window_opacity(_window: tauri::Window, _opacity: f64) {}

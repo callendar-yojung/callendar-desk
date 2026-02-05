@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useWorkspaceStore } from '../../stores'
+import { useWorkspaceStore, useModalStore } from '../../stores'
 import { teamApi } from '../../api'
 
 export function ModeSelector() {
@@ -154,7 +154,7 @@ export function ModeSelector() {
               <button
                   onClick={() => {
                     closeDropdown()
-                    // TODO: 팀 생성 모달 열기
+                    useModalStore.getState().openTeamCreateModal()
                   }}
                   className="w-full px-5 py-3 text-left text-sm text-blue-600 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
               >
