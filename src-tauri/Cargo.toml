@@ -28,6 +28,8 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-http = "2.5.7"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 urlencoding = "2.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]

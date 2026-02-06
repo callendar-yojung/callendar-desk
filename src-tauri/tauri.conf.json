@@ -46,6 +46,7 @@
     ],
     "active": true,
     "targets": ["msi", "nsis"],
+    "createUpdaterArtifacts": true,
     "windows": {
       "wix": {
         "language": "ko-KR",
@@ -61,6 +62,14 @@
       "entitlements": "Entitlements.plist",
       "signingIdentity": "-",
       "infoPlist": "Info.plist"
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "appimage": {
+        "bundleMediaFramework": true
+      }
     }
   },
 
@@ -72,6 +81,12 @@
       "desktop": {
         "schemes": ["deskcal"]
       }
+    },
+    "updater": {
+      "endpoints": [
+        "https://trabien.com/api/releases/update/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": ""
     }
   }
 }

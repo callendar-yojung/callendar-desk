@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { invoke } from '@tauri-apps/api/core'
+import { check } from '@tauri-apps/plugin-updater'
+import { relaunch } from '@tauri-apps/plugin-process'
 import { useModalStore, useAuthStore, useThemeStore } from '../../stores'
 import { authApi } from '../../api'
+import { getVersion } from '@tauri-apps/api/app'
 
 type SettingsTab = 'profile' | 'system'
 
@@ -233,15 +236,23 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 // ── 시스템 설정 탭 ──────────────────────────────────────────────
 
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'upToDate' | 'error'
+
 function SystemTab() {
   const { t, i18n } = useTranslation()
   const { theme, toggleTheme } = useThemeStore()
   const [autostart, setAutostart] = useState(false)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle')
+  const [newVersion, setNewVersion] = useState<string | null>(null)
+  const [currentVersion, setCurrentVersion] = useState<string>('')
+  const [downloadProgress, setDownloadProgress] = useState(0)
+  const updateRef = useRef<Awaited<ReturnType<typeof check>> | null>(null)
 
   useEffect(() => {
     invoke<boolean>('get_autostart')
       .then(setAutostart)
       .catch(console.error)
+    getVersion().then(setCurrentVersion).catch(console.error)
   }, [])
 
   const toggleAutostart = async () => {
@@ -255,6 +266,41 @@ function SystemTab() {
 
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'ko' ? 'en' : 'ko')
+  }
+
+  const checkForUpdates = async () => {
+    setUpdateStatus('checking')
+    try {
+      const update = await check()
+      if (update) {
+        setNewVersion(update.version)
+        setUpdateStatus('available')
+        updateRef.current = update
+      } else {
+        setUpdateStatus('upToDate')
+      }
+    } catch (err) {
+      console.error('Update check failed:', err)
+      setUpdateStatus('error')
+    }
+  }
+
+  const downloadAndInstall = async () => {
+    if (!updateRef.current) return
+    setUpdateStatus('downloading')
+    try {
+      await updateRef.current.downloadAndInstall((event) => {
+        if (event.event === 'Progress') {
+          const progress = (event.data.chunkLength / event.data.contentLength) * 100
+          setDownloadProgress(progress)
+        }
+      })
+      setUpdateStatus('ready')
+      await relaunch()
+    } catch (err) {
+      console.error('Download failed:', err)
+      setUpdateStatus('error')
+    }
   }
 
   return (
@@ -323,6 +369,49 @@ function SystemTab() {
               }`}
             />
           </button>
+        }
+      />
+
+      <SettingRow
+        icon={
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+        }
+        label={`${t('update.label')} (v${currentVersion})`}
+        action={
+          <div className="flex items-center gap-2">
+            {updateStatus === 'checking' && (
+              <span className="text-xs text-gray-500">{t('update.checking')}</span>
+            )}
+            {updateStatus === 'upToDate' && (
+              <span className="text-xs text-green-500">{t('update.upToDate')}</span>
+            )}
+            {updateStatus === 'available' && (
+              <button
+                onClick={downloadAndInstall}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+              >
+                {t('update.install')} (v{newVersion})
+              </button>
+            )}
+            {updateStatus === 'downloading' && (
+              <span className="text-xs text-blue-500">{t('update.downloading')} {Math.round(downloadProgress)}%</span>
+            )}
+            {updateStatus === 'error' && (
+              <span className="text-xs text-red-500">{t('update.failed')}</span>
+            )}
+            {(updateStatus === 'idle' || updateStatus === 'error' || updateStatus === 'upToDate') && (
+              <button
+                onClick={checkForUpdates}
+                disabled={updateStatus === 'checking'}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+              >
+                {t('update.checkUpdate')}
+              </button>
+            )}
+          </div>
         }
       />
     </div>

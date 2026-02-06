@@ -70,5 +70,16 @@
   "settings.language": "Language",
   "settings.editNickname": "Edit nickname",
   "settings.provider": "Login provider",
-  "settings.memberId": "Member ID"
+  "settings.memberId": "Member ID",
+  "update.label": "App Update",
+  "update.checkUpdate": "Check for updates",
+  "update.checking": "Checking...",
+  "update.available": "New version available",
+  "update.upToDate": "You're up to date",
+  "update.downloading": "Downloading...",
+  "update.readyToInstall": "Ready to install",
+  "update.install": "Install Now",
+  "update.failed": "Update check failed",
+  "update.version": "Version",
+  "update.currentVersion": "Current version"
 }

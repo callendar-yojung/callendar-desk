@@ -71,5 +71,16 @@
   "settings.language": "언어",
   "settings.editNickname": "닉네임 수정",
   "settings.provider": "로그인 방식",
-  "settings.memberId": "회원 번호"
+  "settings.memberId": "회원 번호",
+  "update.label": "앱 업데이트",
+  "update.checkUpdate": "업데이트 확인",
+  "update.checking": "확인 중...",
+  "update.available": "새 버전이 있습니다",
+  "update.upToDate": "최신 버전입니다",
+  "update.downloading": "다운로드 중...",
+  "update.readyToInstall": "설치 준비 완료",
+  "update.install": "지금 설치",
+  "update.failed": "업데이트 확인 실패",
+  "update.version": "버전",
+  "update.currentVersion": "현재 버전"
 }

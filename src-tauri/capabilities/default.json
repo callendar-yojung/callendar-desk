@@ -28,6 +28,7 @@
         { "url": "https://kauth.kakao.com/*" },
         { "url": "https://kapi.kakao.com/*" }
       ]
-    }
+    },
+    "updater:default"
   ]
 }

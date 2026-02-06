@@ -67,96 +67,62 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           PLATFORM=${{ matrix.platform }}
-          ZIP_NAME="desktop-calendar-${VERSION}-${PLATFORM}.zip"
-
+          
           echo "=== Debug: Searching for bundle directories ==="
-
-          # Find bundle directory dynamically - it could be in different locations
-          # depending on the platform and architecture
+          
           BUNDLE_DIR=$(find src-tauri/target -type d -name "bundle" 2>/dev/null | grep -E "release/bundle$" | head -1)
-
+          
           if [[ -z "$BUNDLE_DIR" ]]; then
             echo "Error: No bundle directory found"
-            echo "=== Listing src-tauri/target structure ==="
-            find src-tauri/target -type d -maxdepth 4 2>/dev/null || echo "No target directory"
+            find src-tauri/target -type d -maxdepth 4 || true
             exit 1
           fi
-
+          
           echo "=== Found bundle directory: $BUNDLE_DIR ==="
-          ls -la "$BUNDLE_DIR" || echo "Cannot list bundle dir"
-
+          ls -la "$BUNDLE_DIR" || true
+          
           if [[ "$PLATFORM" == "windows" ]]; then
-            # Windows: find .msi or .exe (NSIS) file
-            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.msi" -type f 2>/dev/null | head -1)
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.msi" -type f | head -1)
             if [[ -z "$ARTIFACT" ]]; then
-              ARTIFACT=$(find "$BUNDLE_DIR" -name "*.exe" -type f 2>/dev/null | head -1)
+              ARTIFACT=$(find "$BUNDLE_DIR" -name "*.exe" -type f | head -1)
             fi
           elif [[ "$PLATFORM" == "macos" ]]; then
-            # macOS: find .dmg file
-            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.dmg" -type f 2>/dev/null | head -1)
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.dmg" -type f | head -1)
           else
-            # Linux: find .deb or .AppImage file
-            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.deb" -type f 2>/dev/null | head -1)
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.deb" -type f | head -1)
             if [[ -z "$ARTIFACT" ]]; then
-              ARTIFACT=$(find "$BUNDLE_DIR" -name "*.AppImage" -type f 2>/dev/null | head -1)
+              ARTIFACT=$(find "$BUNDLE_DIR" -name "*.AppImage" -type f | head -1)
             fi
           fi
-
-          echo "=== Found artifact: $ARTIFACT ==="
-
+          
           if [[ -z "$ARTIFACT" || ! -f "$ARTIFACT" ]]; then
             echo "Error: No artifact found for platform $PLATFORM"
-            echo "=== Listing all files in bundle directory ==="
-            find "$BUNDLE_DIR" -type f 2>/dev/null || echo "No files in bundle"
+            find "$BUNDLE_DIR" -type f || true
             exit 1
           fi
-
-          # Get artifact directory and filename
-          ARTIFACT_DIR=$(dirname "$ARTIFACT")
+          
           ARTIFACT_NAME=$(basename "$ARTIFACT")
-
-          echo "Artifact dir: $ARTIFACT_DIR"
-          echo "Artifact name: $ARTIFACT_NAME"
-
-          # Create zip in workspace root
-          cd "$ARTIFACT_DIR"
-
+          ARTIFACT_PATH="$ARTIFACT"
+          
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo "ARTIFACT_PATH=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
+          
+          # File size
           if [[ "$PLATFORM" == "windows" ]]; then
-            7z a "$GITHUB_WORKSPACE/$ZIP_NAME" "$ARTIFACT_NAME"
-          else
-            zip -j "$GITHUB_WORKSPACE/$ZIP_NAME" "$ARTIFACT_NAME"
-          fi
-
-          cd "$GITHUB_WORKSPACE"
-
-          # Verify zip exists
-          if [[ ! -f "$ZIP_NAME" ]]; then
-            echo "Error: ZIP file not created"
-            ls -la
-            exit 1
-          fi
-
-          echo "=== ZIP created: $ZIP_NAME ==="
-          ls -la "$ZIP_NAME"
-
-          # Calculate file size
-          if [[ "$PLATFORM" == "windows" ]]; then
-            FILE_SIZE=$(powershell -command "(Get-Item '$ZIP_NAME').Length")
+            FILE_SIZE=$(powershell -command "(Get-Item '$ARTIFACT_PATH').Length")
           elif [[ "$PLATFORM" == "macos" ]]; then
-            FILE_SIZE=$(stat -f%z "$ZIP_NAME")
+            FILE_SIZE=$(stat -f%z "$ARTIFACT_PATH")
           else
-            FILE_SIZE=$(stat -c%s "$ZIP_NAME")
+            FILE_SIZE=$(stat -c%s "$ARTIFACT_PATH")
           fi
-
-          # Calculate checksum
+          
+          # Checksum
           if [[ "$PLATFORM" == "windows" ]]; then
-            CHECKSUM=$(powershell -command "(Get-FileHash '$ZIP_NAME' -Algorithm SHA256).Hash.ToLower()")
+            CHECKSUM=$(powershell -command "(Get-FileHash '$ARTIFACT_PATH' -Algorithm SHA256).Hash.ToLower()")
           else
-            CHECKSUM=$(shasum -a 256 "$ZIP_NAME" | cut -d ' ' -f 1)
+            CHECKSUM=$(shasum -a 256 "$ARTIFACT_PATH" | cut -d ' ' -f 1)
           fi
-
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_OUTPUT
-          echo "ZIP_PATH=$GITHUB_WORKSPACE/$ZIP_NAME" >> $GITHUB_OUTPUT
+          
           echo "FILE_SIZE=$FILE_SIZE" >> $GITHUB_OUTPUT
           echo "CHECKSUM=$CHECKSUM" >> $GITHUB_OUTPUT
 
