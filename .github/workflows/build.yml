@@ -51,16 +51,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Update version in tauri.conf.json
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          echo "Updating version to $VERSION"
+          # Update version in tauri.conf.json
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            powershell -Command "(Get-Content src-tauri/tauri.conf.json) -replace '\"version\": \"[^\"]*\"', '\"version\": \"${{ steps.version.outputs.VERSION }}\"' | Set-Content src-tauri/tauri.conf.json"
+          else
+            sed -i.bak 's/"version": "[^"]*"/"version": "'$VERSION'"/' src-tauri/tauri.conf.json
+            rm -f src-tauri/tauri.conf.json.bak
+          fi
+          # Verify the change
+          grep '"version"' src-tauri/tauri.conf.json
+
       - name: Build Tauri app
         run: npm run tauri:build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-      - name: Get version from tag
-        id: version
-        shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Find and prepare artifacts
         id: artifacts
