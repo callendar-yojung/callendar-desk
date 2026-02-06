@@ -69,28 +69,45 @@ jobs:
           PLATFORM=${{ matrix.platform }}
           ZIP_NAME="desktop-calendar-${VERSION}-${PLATFORM}.zip"
 
-          echo "=== Debug: Listing bundle directory ==="
-          ls -la src-tauri/target/release/bundle/ || echo "Bundle dir not found"
+          echo "=== Debug: Searching for bundle directories ==="
 
-          # Find the actual bundle files
-          BUNDLE_BASE="src-tauri/target/release/bundle"
+          # Find bundle directory dynamically - it could be in different locations
+          # depending on the platform and architecture
+          BUNDLE_DIR=$(find src-tauri/target -type d -name "bundle" 2>/dev/null | grep -E "release/bundle$" | head -1)
+
+          if [[ -z "$BUNDLE_DIR" ]]; then
+            echo "Error: No bundle directory found"
+            echo "=== Listing src-tauri/target structure ==="
+            find src-tauri/target -type d -maxdepth 4 2>/dev/null || echo "No target directory"
+            exit 1
+          fi
+
+          echo "=== Found bundle directory: $BUNDLE_DIR ==="
+          ls -la "$BUNDLE_DIR" || echo "Cannot list bundle dir"
 
           if [[ "$PLATFORM" == "windows" ]]; then
-            # Windows: find .msi file
-            ARTIFACT=$(find "$BUNDLE_BASE" -name "*.msi" -type f 2>/dev/null | head -1)
+            # Windows: find .msi or .exe (NSIS) file
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.msi" -type f 2>/dev/null | head -1)
+            if [[ -z "$ARTIFACT" ]]; then
+              ARTIFACT=$(find "$BUNDLE_DIR" -name "*.exe" -type f 2>/dev/null | head -1)
+            fi
           elif [[ "$PLATFORM" == "macos" ]]; then
             # macOS: find .dmg file
-            ARTIFACT=$(find "$BUNDLE_BASE" -name "*.dmg" -type f 2>/dev/null | head -1)
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.dmg" -type f 2>/dev/null | head -1)
           else
-            # Linux: find .deb file
-            ARTIFACT=$(find "$BUNDLE_BASE" -name "*.deb" -type f 2>/dev/null | head -1)
+            # Linux: find .deb or .AppImage file
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.deb" -type f 2>/dev/null | head -1)
+            if [[ -z "$ARTIFACT" ]]; then
+              ARTIFACT=$(find "$BUNDLE_DIR" -name "*.AppImage" -type f 2>/dev/null | head -1)
+            fi
           fi
 
           echo "=== Found artifact: $ARTIFACT ==="
 
           if [[ -z "$ARTIFACT" || ! -f "$ARTIFACT" ]]; then
             echo "Error: No artifact found for platform $PLATFORM"
-            find "$BUNDLE_BASE" -type f 2>/dev/null || echo "No files in bundle"
+            echo "=== Listing all files in bundle directory ==="
+            find "$BUNDLE_DIR" -type f 2>/dev/null || echo "No files in bundle"
             exit 1
           fi
 
