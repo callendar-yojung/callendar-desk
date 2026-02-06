@@ -14,10 +14,10 @@ jobs:
         include:
           - os: windows-latest
             platform: windows
-#          - os: macos-14
-#            platform: macos
-#          - os: ubuntu-22.04
-#            platform: linux
+          - os: macos-14
+            platform: macos
+          - os: ubuntu-22.04
+            platform: linux
 
     steps:
       - name: Checkout repo
@@ -68,64 +68,97 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           PLATFORM=${{ matrix.platform }}
-          
+
           echo "=== Debug: Searching for bundle directories ==="
-          
+
+          # Find bundle directory dynamically
           BUNDLE_DIR=$(find src-tauri/target -type d -name "bundle" 2>/dev/null | grep -E "release/bundle$" | head -1)
-          
+
           if [[ -z "$BUNDLE_DIR" ]]; then
             echo "Error: No bundle directory found"
-            find src-tauri/target -type d -maxdepth 4 || true
+            echo "=== Listing src-tauri/target structure ==="
+            find src-tauri/target -type d -maxdepth 4 2>/dev/null || echo "No target directory"
             exit 1
           fi
-          
+
           echo "=== Found bundle directory: $BUNDLE_DIR ==="
-          ls -la "$BUNDLE_DIR" || true
-          
+          ls -laR "$BUNDLE_DIR" || echo "Cannot list bundle dir"
+
+          # Find the main installer artifact
           if [[ "$PLATFORM" == "windows" ]]; then
-            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.msi" -type f | head -1)
+            # Windows: prefer .msi, fallback to .exe (NSIS)
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.msi" -type f 2>/dev/null | head -1)
             if [[ -z "$ARTIFACT" ]]; then
-              ARTIFACT=$(find "$BUNDLE_DIR" -name "*.exe" -type f | head -1)
+              ARTIFACT=$(find "$BUNDLE_DIR" -name "*-setup.exe" -type f 2>/dev/null | head -1)
+            fi
+            # Find signature file for updater
+            SIG_FILE=$(find "$BUNDLE_DIR" -name "*.msi.sig" -type f 2>/dev/null | head -1)
+            if [[ -z "$SIG_FILE" ]]; then
+              SIG_FILE=$(find "$BUNDLE_DIR" -name "*.exe.sig" -type f 2>/dev/null | head -1)
             fi
           elif [[ "$PLATFORM" == "macos" ]]; then
-            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.dmg" -type f | head -1)
+            # macOS: find .dmg file
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.dmg" -type f 2>/dev/null | head -1)
+            SIG_FILE=$(find "$BUNDLE_DIR" -name "*.dmg.sig" -type f 2>/dev/null | head -1)
           else
-            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.deb" -type f | head -1)
+            # Linux: prefer .deb, fallback to .AppImage
+            ARTIFACT=$(find "$BUNDLE_DIR" -name "*.deb" -type f 2>/dev/null | head -1)
+            SIG_FILE=$(find "$BUNDLE_DIR" -name "*.deb.sig" -type f 2>/dev/null | head -1)
             if [[ -z "$ARTIFACT" ]]; then
-              ARTIFACT=$(find "$BUNDLE_DIR" -name "*.AppImage" -type f | head -1)
+              ARTIFACT=$(find "$BUNDLE_DIR" -name "*.AppImage" -type f 2>/dev/null | head -1)
+              SIG_FILE=$(find "$BUNDLE_DIR" -name "*.AppImage.sig" -type f 2>/dev/null | head -1)
             fi
           fi
-          
+
+          echo "=== Found artifact: $ARTIFACT ==="
+          echo "=== Found signature: $SIG_FILE ==="
+
           if [[ -z "$ARTIFACT" || ! -f "$ARTIFACT" ]]; then
             echo "Error: No artifact found for platform $PLATFORM"
-            find "$BUNDLE_DIR" -type f || true
+            echo "=== Listing all files in bundle directory ==="
+            find "$BUNDLE_DIR" -type f 2>/dev/null || echo "No files in bundle"
             exit 1
           fi
-          
+
           ARTIFACT_NAME=$(basename "$ARTIFACT")
           ARTIFACT_PATH="$ARTIFACT"
-          
+
+          # Copy artifact to workspace root for easier access
+          cp "$ARTIFACT" "$GITHUB_WORKSPACE/$ARTIFACT_NAME"
+
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-          echo "ARTIFACT_PATH=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
-          
-          # File size
+          echo "ARTIFACT_PATH=$GITHUB_WORKSPACE/$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+
+          # Handle signature file
+          if [[ -n "$SIG_FILE" && -f "$SIG_FILE" ]]; then
+            SIG_NAME=$(basename "$SIG_FILE")
+            cp "$SIG_FILE" "$GITHUB_WORKSPACE/$SIG_NAME"
+            echo "SIG_NAME=$SIG_NAME" >> $GITHUB_OUTPUT
+            echo "SIG_PATH=$GITHUB_WORKSPACE/$SIG_NAME" >> $GITHUB_OUTPUT
+            SIGNATURE=$(cat "$SIG_FILE")
+            echo "SIGNATURE=$SIGNATURE" >> $GITHUB_OUTPUT
+          fi
+
+          # Calculate file size
           if [[ "$PLATFORM" == "windows" ]]; then
-            FILE_SIZE=$(powershell -command "(Get-Item '$ARTIFACT_PATH').Length")
+            FILE_SIZE=$(powershell -command "(Get-Item '$GITHUB_WORKSPACE/$ARTIFACT_NAME').Length")
           elif [[ "$PLATFORM" == "macos" ]]; then
-            FILE_SIZE=$(stat -f%z "$ARTIFACT_PATH")
+            FILE_SIZE=$(stat -f%z "$GITHUB_WORKSPACE/$ARTIFACT_NAME")
           else
-            FILE_SIZE=$(stat -c%s "$ARTIFACT_PATH")
+            FILE_SIZE=$(stat -c%s "$GITHUB_WORKSPACE/$ARTIFACT_NAME")
           fi
-          
-          # Checksum
+
+          # Calculate checksum
           if [[ "$PLATFORM" == "windows" ]]; then
-            CHECKSUM=$(powershell -command "(Get-FileHash '$ARTIFACT_PATH' -Algorithm SHA256).Hash.ToLower()")
+            CHECKSUM=$(powershell -command "(Get-FileHash '$GITHUB_WORKSPACE/$ARTIFACT_NAME' -Algorithm SHA256).Hash.ToLower()")
           else
-            CHECKSUM=$(shasum -a 256 "$ARTIFACT_PATH" | cut -d ' ' -f 1)
+            CHECKSUM=$(shasum -a 256 "$GITHUB_WORKSPACE/$ARTIFACT_NAME" | cut -d ' ' -f 1)
           fi
-          
+
           echo "FILE_SIZE=$FILE_SIZE" >> $GITHUB_OUTPUT
           echo "CHECKSUM=$CHECKSUM" >> $GITHUB_OUTPUT
+
+          echo "=== Artifact prepared: $ARTIFACT_NAME (${FILE_SIZE} bytes) ==="
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -140,13 +173,21 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           PLATFORM=${{ matrix.platform }}
-          ZIP_NAME=${{ steps.artifacts.outputs.ZIP_NAME }}
+          ARTIFACT_NAME="${{ steps.artifacts.outputs.ARTIFACT_NAME }}"
+          ARTIFACT_PATH="${{ steps.artifacts.outputs.ARTIFACT_PATH }}"
 
-          S3_PATH="s3://${{ secrets.AWS_S3_BUCKET }}/releases/v${VERSION}/${PLATFORM}/${ZIP_NAME}"
-          aws s3 cp "$ZIP_NAME" "$S3_PATH"
+          S3_PATH="s3://${{ secrets.AWS_S3_BUCKET }}/releases/v${VERSION}/${PLATFORM}/${ARTIFACT_NAME}"
+          aws s3 cp "$ARTIFACT_PATH" "$S3_PATH"
 
-          S3_URL="https://${{ secrets.AWS_S3_BUCKET }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/releases/v${VERSION}/${PLATFORM}/${ZIP_NAME}"
+          S3_URL="https://${{ secrets.AWS_S3_BUCKET }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/releases/v${VERSION}/${PLATFORM}/${ARTIFACT_NAME}"
           echo "S3_URL=$S3_URL" >> $GITHUB_OUTPUT
+
+          # Upload signature file if exists
+          SIG_NAME="${{ steps.artifacts.outputs.SIG_NAME }}"
+          SIG_PATH="${{ steps.artifacts.outputs.SIG_PATH }}"
+          if [[ -n "$SIG_NAME" && -f "$SIG_PATH" ]]; then
+            aws s3 cp "$SIG_PATH" "s3://${{ secrets.AWS_S3_BUCKET }}/releases/v${VERSION}/${PLATFORM}/${SIG_NAME}"
+          fi
 
       - name: Save release info to database
         shell: bash
@@ -154,10 +195,11 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           PLATFORM=${{ matrix.platform }}
-          ZIP_NAME=${{ steps.artifacts.outputs.ZIP_NAME }}
+          ARTIFACT_NAME="${{ steps.artifacts.outputs.ARTIFACT_NAME }}"
           FILE_SIZE=${{ steps.artifacts.outputs.FILE_SIZE }}
           CHECKSUM=${{ steps.artifacts.outputs.CHECKSUM }}
-          S3_URL=${{ steps.s3_upload.outputs.S3_URL }}
+          S3_URL="${{ steps.s3_upload.outputs.S3_URL }}"
+          SIGNATURE="${{ steps.artifacts.outputs.SIGNATURE }}"
 
           # Escape commit message for JSON
           RELEASE_NOTES=$(echo "${{ github.event.head_commit.message }}" | head -1 | sed 's/"/\\"/g' | tr -d '\n\r')
@@ -169,10 +211,11 @@ jobs:
             -d "{
               \"version\": \"${VERSION}\",
               \"platform\": \"${PLATFORM}\",
-              \"fileName\": \"${ZIP_NAME}\",
+              \"fileName\": \"${ARTIFACT_NAME}\",
               \"downloadUrl\": \"${S3_URL}\",
               \"fileSize\": ${FILE_SIZE},
               \"checksum\": \"${CHECKSUM}\",
+              \"signature\": \"${SIGNATURE}\",
               \"releaseNotes\": \"${RELEASE_NOTES}\",
               \"isPrerelease\": false
             }"
@@ -181,7 +224,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-build
-          path: ${{ steps.artifacts.outputs.ZIP_NAME }}
+          path: |
+            ${{ steps.artifacts.outputs.ARTIFACT_PATH }}
+            ${{ steps.artifacts.outputs.SIG_PATH }}
 
   release:
     needs: build
@@ -202,7 +247,13 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*.zip
+          files: |
+            artifacts/**/*.msi
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.deb
+            artifacts/**/*.AppImage
+            artifacts/**/*.sig
           tag_name: v${{ steps.version.outputs.VERSION }}
           name: Release v${{ steps.version.outputs.VERSION }}
           generate_release_notes: true
