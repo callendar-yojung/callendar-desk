@@ -14,10 +14,10 @@ jobs:
         include:
           - os: windows-latest
             platform: windows
-          - os: macos-14
-            platform: macos
-          - os: ubuntu-22.04
-            platform: linux
+#          - os: macos-14
+#            platform: macos
+#          - os: ubuntu-22.04
+#            platform: linux
 
     steps:
       - name: Checkout repo
