@@ -3,14 +3,12 @@
   "productName": "Desktop Calendar",
   "version": "1.2.1",
   "identifier": "com.deskcal.app",
-
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
-
   "app": {
     "windows": [
       {
@@ -35,7 +33,6 @@
       "csp": null
     }
   },
-
   "bundle": {
     "icon": [
       "icons/32x32.png",
@@ -45,7 +42,7 @@
       "icons/icon.ico"
     ],
     "active": true,
-    "targets": ["msi", "nsis"],
+    "targets": "all",
     "createUpdaterArtifacts": true,
     "windows": {
       "wix": {
@@ -53,7 +50,10 @@
         "upgradeCode": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
       },
       "nsis": {
-        "languages": ["Korean", "English"],
+        "languages": [
+          "Korean",
+          "English"
+        ],
         "displayLanguageSelector": true,
         "installerHooks": "nsis-hooks.nsh"
       }
@@ -72,27 +72,22 @@
       }
     }
   },
-
   "plugins": {
     "updater": {
-      "active": true,
-      "dialog": true,
-      "endpoints": ["https://your-update-server.com/desktop-calendar/{{target}}/{{current_version}}"],
-      "pubkey": ""
+      "endpoints": [
+        "https://trabien.com/api/releases/update/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJGNTQzRTYxQjU4MDBENzQKUldSMERZQzFZVDVVTDhxVHFqaUIzbjE2OXk5QmdRR2lVdVJLWWdDNWZUeU5DVlVGcTBSVDVhSXgK"
     },
     "shell": {
       "open": true
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["deskcal"]
+        "schemes": [
+          "deskcal"
+        ]
       }
-    },
-    "updater": {
-      "endpoints": [
-        "https://trabien.com/api/releases/update/{{target}}/{{arch}}/{{current_version}}"
-      ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJGNTQzRTYxQjU4MDBENzQKUldSMERZQzFZVDVVTDhxVHFqaUIzbjE2OXk5QmdRR2lVdVJLWWdDNWZUeU5DVlVGcTBSVDVhSXgK"
     }
   }
 }
