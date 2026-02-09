@@ -92,32 +92,33 @@ jobs:
           find src-tauri/target -type f \( -name "*.msi" -o -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.app" -o -name "*-setup.exe" \) 2>/dev/null || echo "No artifacts found"
 
           # Find artifacts directly from target directory (more flexible)
+          # Use release path to avoid pipefail issues
           if [[ "$PLATFORM" == "windows" ]]; then
             # Windows: prefer .msi, fallback to .exe (NSIS)
-            ARTIFACT=$(find src-tauri/target -name "*.msi" -type f 2>/dev/null | grep -v "debug" | head -1)
+            ARTIFACT=$(find src-tauri/target/release -name "*.msi" -type f 2>/dev/null | head -1 || true)
             if [[ -z "$ARTIFACT" ]]; then
-              ARTIFACT=$(find src-tauri/target -name "*-setup.exe" -type f 2>/dev/null | grep -v "debug" | head -1)
+              ARTIFACT=$(find src-tauri/target/release -name "*-setup.exe" -type f 2>/dev/null | head -1 || true)
             fi
-            SIG_FILE=$(find src-tauri/target -name "*.msi.sig" -type f 2>/dev/null | grep -v "debug" | head -1)
+            SIG_FILE=$(find src-tauri/target/release -name "*.msi.sig" -type f 2>/dev/null | head -1 || true)
             if [[ -z "$SIG_FILE" ]]; then
-              SIG_FILE=$(find src-tauri/target -name "*-setup.exe.sig" -type f 2>/dev/null | grep -v "debug" | head -1)
+              SIG_FILE=$(find src-tauri/target/release -name "*-setup.exe.sig" -type f 2>/dev/null | head -1 || true)
             fi
           elif [[ "$PLATFORM" == "macos" ]]; then
             # macOS: find .dmg file
-            ARTIFACT=$(find src-tauri/target -name "*.dmg" -type f 2>/dev/null | grep -v "debug" | head -1)
-            SIG_FILE=$(find src-tauri/target -name "*.dmg.sig" -type f 2>/dev/null | grep -v "debug" | head -1)
+            ARTIFACT=$(find src-tauri/target/release -name "*.dmg" -type f 2>/dev/null | head -1 || true)
+            SIG_FILE=$(find src-tauri/target/release -name "*.dmg.sig" -type f 2>/dev/null | head -1 || true)
             # Fallback: if no dmg, look for .app.tar.gz (Tauri updater format)
             if [[ -z "$ARTIFACT" ]]; then
-              ARTIFACT=$(find src-tauri/target -name "*.app.tar.gz" -type f 2>/dev/null | grep -v "debug" | head -1)
-              SIG_FILE=$(find src-tauri/target -name "*.app.tar.gz.sig" -type f 2>/dev/null | grep -v "debug" | head -1)
+              ARTIFACT=$(find src-tauri/target/release -name "*.app.tar.gz" -type f 2>/dev/null | head -1 || true)
+              SIG_FILE=$(find src-tauri/target/release -name "*.app.tar.gz.sig" -type f 2>/dev/null | head -1 || true)
             fi
           else
             # Linux: prefer .deb, fallback to .AppImage
-            ARTIFACT=$(find src-tauri/target -name "*.deb" -type f 2>/dev/null | grep -v "debug" | head -1)
-            SIG_FILE=$(find src-tauri/target -name "*.deb.sig" -type f 2>/dev/null | grep -v "debug" | head -1)
+            ARTIFACT=$(find src-tauri/target/release -name "*.deb" -type f 2>/dev/null | head -1 || true)
+            SIG_FILE=$(find src-tauri/target/release -name "*.deb.sig" -type f 2>/dev/null | head -1 || true)
             if [[ -z "$ARTIFACT" ]]; then
-              ARTIFACT=$(find src-tauri/target -name "*.AppImage" -type f 2>/dev/null | grep -v "debug" | head -1)
-              SIG_FILE=$(find src-tauri/target -name "*.AppImage.sig" -type f 2>/dev/null | grep -v "debug" | head -1)
+              ARTIFACT=$(find src-tauri/target/release -name "*.AppImage" -type f 2>/dev/null | head -1 || true)
+              SIG_FILE=$(find src-tauri/target/release -name "*.AppImage.sig" -type f 2>/dev/null | head -1 || true)
             fi
           fi
 
