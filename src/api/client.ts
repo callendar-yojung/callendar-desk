@@ -3,7 +3,7 @@ import { fetch } from '@tauri-apps/plugin-http'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://trabien.com'
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
   headers?: Record<string, string>
 }
@@ -11,6 +11,7 @@ interface RequestOptions {
 class ApiClient {
   private baseUrl: string
   private accessToken: string | null = null
+  private refreshHandler: (() => Promise<{ accessToken: string; refreshToken?: string }>) | null = null
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
@@ -24,7 +25,11 @@ class ApiClient {
     return this.accessToken
   }
 
-  private async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  setRefreshHandler(handler: () => Promise<{ accessToken: string; refreshToken?: string }>) {
+    this.refreshHandler = handler
+  }
+
+  private async request<T>(endpoint: string, options: RequestOptions = {}, isRetry = false): Promise<T> {
     const { method = 'GET', body, headers = {} } = options
 
     const requestHeaders: Record<string, string> = {
@@ -64,6 +69,23 @@ class ApiClient {
       console.log('📄 API Response Body:', responseText)
 
       if (!response.ok) {
+        if (
+          response.status === 401 &&
+          this.refreshHandler &&
+          !isRetry &&
+          !endpoint.includes('/api/auth/external/refresh')
+        ) {
+          try {
+            const refreshed = await this.refreshHandler()
+            if (refreshed?.accessToken) {
+              this.setAccessToken(refreshed.accessToken)
+              return this.request<T>(endpoint, options, true)
+            }
+          } catch (refreshError) {
+            console.error('❌ Token refresh failed:', refreshError)
+          }
+        }
+
         let errorMessage = `API Error: ${response.status} ${response.statusText}`
 
         try {
@@ -106,6 +128,10 @@ class ApiClient {
 
   patch<T>(endpoint: string, body?: unknown): Promise<T> {
     return this.request<T>(endpoint, { method: 'PATCH', body })
+  }
+
+  put<T>(endpoint: string, body?: unknown): Promise<T> {
+    return this.request<T>(endpoint, { method: 'PUT', body })
   }
 
   delete<T>(endpoint: string): Promise<T> {

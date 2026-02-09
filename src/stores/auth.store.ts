@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Member } from '../types'
-import { apiClient } from '../api'
+import { apiClient, authApi } from '../api'
 
 interface AuthState {
   user: Member | null
@@ -18,7 +18,30 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => {
+      const refreshSession = async () => {
+        const refreshToken = get().refreshToken
+        if (!refreshToken) {
+          throw new Error('No refresh token available')
+        }
+
+        const response = await authApi.refreshToken(refreshToken)
+        const nextAccessToken = response.accessToken
+        const nextRefreshToken = response.refreshToken || refreshToken
+
+        apiClient.setAccessToken(nextAccessToken)
+        set({
+          accessToken: nextAccessToken,
+          refreshToken: nextRefreshToken,
+          isAuthenticated: true,
+        })
+
+        return { accessToken: nextAccessToken, refreshToken: nextRefreshToken }
+      }
+
+      apiClient.setRefreshHandler(refreshSession)
+
+      return {
       user: null,
       accessToken: null,
       refreshToken: null,
@@ -53,7 +76,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setLoading: (isLoading) => set({ isLoading }),
-    }),
+    }
+  },
     {
       name: 'auth-storage',
       onRehydrateStorage: () => (state) => {

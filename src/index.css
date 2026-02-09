@@ -33,6 +33,40 @@
   --border-color: #4b5563;
 }
 
+/* Pink mode styles */
+.pink {
+  --bg-primary: #ffe4ea;
+  --bg-secondary: #fff0f4;
+  --bg-tertiary: #ffd6df;
+  --text-primary: #4a1d2f;
+  --text-secondary: #7a2942;
+  --text-muted: #9b5063;
+  --border-color: #ffb6c1;
+}
+
+/* Pink theme utility overrides (for Tailwind classes) */
+.pink .bg-white { background-color: var(--bg-primary) !important; }
+.pink .bg-white\/80 { background-color: rgba(255, 228, 234, 0.8) !important; }
+.pink .bg-gray-800\/80 { background-color: rgba(255, 214, 223, 0.8) !important; }
+.pink .bg-gray-50 { background-color: var(--bg-secondary) !important; }
+.pink .bg-gray-100 { background-color: var(--bg-secondary) !important; }
+.pink .bg-gray-200 { background-color: var(--bg-tertiary) !important; }
+.pink .bg-gray-700 { background-color: #f5b8c7 !important; }
+.pink .bg-gray-800 { background-color: #f1a8bb !important; }
+.pink .bg-gray-900 { background-color: #e995ac !important; }
+
+.pink .text-gray-900 { color: var(--text-primary) !important; }
+.pink .text-gray-800 { color: var(--text-primary) !important; }
+.pink .text-gray-700 { color: var(--text-secondary) !important; }
+.pink .text-gray-600 { color: var(--text-secondary) !important; }
+.pink .text-gray-500 { color: var(--text-muted) !important; }
+.pink .text-gray-400 { color: var(--text-muted) !important; }
+
+.pink .border-gray-200 { border-color: var(--border-color) !important; }
+.pink .border-gray-300 { border-color: var(--border-color) !important; }
+.pink .border-gray-600 { border-color: #e88aa1 !important; }
+.pink .border-gray-700 { border-color: #d97790 !important; }
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;

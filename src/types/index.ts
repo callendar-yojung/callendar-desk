@@ -29,6 +29,15 @@ export interface TeamMember {
 
 // Task types
 export type TaskStatus = 'todo' | 'in_progress' | 'done'
+export type BackendTaskStatus = 'TODO' | 'IN_PROGRESS' | 'DONE'
+
+export type OwnerType = 'team' | 'personal'
+
+export interface Tag {
+  tag_id: number
+  name: string
+  color: string
+}
 
 export interface Task {
   id: number
@@ -36,6 +45,8 @@ export interface Task {
   start_time: string
   end_time: string
   content?: string
+  color?: string
+  tag_ids?: number[]
   status?: TaskStatus
   created_at: string
   updated_at: string
@@ -49,7 +60,9 @@ export interface CreateTaskPayload {
   start_time: string
   end_time: string
   content?: string
-  status?: TaskStatus
+  color: string
+  tag_ids: number[]
+  status?: TaskStatus | BackendTaskStatus
   workspace_id: number
 }
 
@@ -59,7 +72,16 @@ export interface UpdateTaskPayload {
   start_time?: string
   end_time?: string
   content?: string
-  status?: TaskStatus
+  color?: string
+  tag_ids?: number[]
+  status?: TaskStatus | BackendTaskStatus
+}
+
+export interface CreateTagPayload {
+  name: string
+  color: string
+  owner_type: OwnerType
+  owner_id: number
 }
 
 // Member types
@@ -91,6 +113,10 @@ export interface TasksResponse {
   tasks: Task[]
 }
 
+export interface TagsResponse {
+  tags: Tag[]
+}
+
 export interface CreateTaskResponse {
   success: boolean
   taskId: number
@@ -102,6 +128,12 @@ export interface UpdateTaskResponse {
 
 export interface DeleteTaskResponse {
   success: boolean
+}
+
+export interface CreateTagResponse {
+  success: boolean
+  tagId?: number
+  tag?: Tag
 }
 
 export interface CalendarResponse {

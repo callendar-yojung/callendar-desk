@@ -1,19 +1,44 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format, parseISO } from 'date-fns'
 import { Modal, Button } from '../common'
-import { useModalStore, useCalendarStore } from '../../stores'
-import { taskApi } from '../../api'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { useModalStore, useCalendarStore, useWorkspaceStore, useAuthStore } from '../../stores'
+import { taskApi, tagApi } from '../../api'
+import type { Tag } from '../../types'
 
 export function EventDetailModal() {
   const { t } = useTranslation()
   const { openedModal, selectedEvent, closeModal, openEditModal } = useModalStore()
   const { setEvents, events } = useCalendarStore()
+  const { currentMode, selectedTeamId } = useWorkspaceStore()
+  const { user } = useAuthStore()
 
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [tags, setTags] = useState<Tag[]>([])
+  const [isTagsLoading, setIsTagsLoading] = useState(false)
 
-  if (openedModal !== 'DETAIL' || !selectedEvent) return null
+  const ownerType = currentMode === 'TEAM' ? 'team' : 'personal'
+  const ownerId = currentMode === 'TEAM' ? selectedTeamId : user?.memberId
+
+  useEffect(() => {
+    const loadTags = async () => {
+      if (!ownerId || openedModal !== 'DETAIL') return
+      setIsTagsLoading(true)
+      try {
+        const response = await tagApi.getTags(ownerType, ownerId)
+        setTags(response.tags)
+      } catch (err) {
+        console.error('Failed to load tags:', err)
+      } finally {
+        setIsTagsLoading(false)
+      }
+    }
+
+    loadTags()
+  }, [openedModal, ownerType, ownerId])
 
   const handleEdit = () => {
     openEditModal(selectedEvent)
@@ -53,62 +78,32 @@ export function EventDetailModal() {
     }
   }
 
+  const selectedTags = useMemo(() => {
+    if (!selectedEvent?.tag_ids?.length) return []
+    return tags.filter((tag) => selectedEvent.tag_ids?.includes(tag.tag_id))
+  }, [tags, selectedEvent?.tag_ids])
+
+  if (openedModal !== 'DETAIL' || !selectedEvent) return null
+
+  const formattedRange =
+    `${formatDateTime(selectedEvent.start_time)} – ${formatDateTime(selectedEvent.end_time)}`
+
   return (
-    <Modal isOpen={true} onClose={closeModal} title={t('event.detail')}>
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {selectedEvent.title}
-          </h3>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex items-start gap-3">
-            <svg
-              className="w-5 h-5 text-gray-400 mt-0.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <div className="text-sm">
-              <p className="text-gray-600 dark:text-gray-400">
-                {t('event.startTime')}: {formatDateTime(selectedEvent.start_time)}
-              </p>
-              <p className="text-gray-600 dark:text-gray-400">
-                {t('event.endTime')}: {formatDateTime(selectedEvent.end_time)}
-              </p>
-            </div>
-          </div>
-
-          {selectedEvent.status && (
-            <div className="flex items-center gap-3">
-              <svg
-                className="w-5 h-5 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {t('event.status')}: {getStatusLabel(selectedEvent.status)}
-              </span>
-            </div>
-          )}
-
-          {selectedEvent.content && (
+    <Modal
+      isOpen={true}
+      onClose={closeModal}
+      title={t('event.detail')}
+      showHeader={false}
+      containerClassName="bg-transparent shadow-none"
+      contentClassName="p-0"
+    >
+      <Card>
+        <CardHeader>
+          <CardTitle>{selectedEvent.title}</CardTitle>
+          <CardDescription>{formattedRange}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40 p-4 space-y-4">
             <div className="flex items-start gap-3">
               <svg
                 className="w-5 h-5 text-gray-400 mt-0.5"
@@ -120,25 +115,119 @@ export function EventDetailModal() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M4 6h16M4 12h16M4 18h7"
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
+              <div className="text-sm">
+                <p className="text-gray-600 dark:text-gray-400">
+                  {t('event.startTime')}: {formatDateTime(selectedEvent.start_time)}
+                </p>
+                <p className="text-gray-600 dark:text-gray-400">
+                  {t('event.endTime')}: {formatDateTime(selectedEvent.end_time)}
+                </p>
+              </div>
+            </div>
+
+            {selectedEvent.status && (
+              <div className="flex items-center gap-3">
+                <svg
+                  className="w-5 h-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {t('event.status')}: {getStatusLabel(selectedEvent.status)}
+                </span>
+              </div>
+            )}
+
+            {selectedEvent.color && (
+              <div className="flex items-center gap-3">
+                <svg
+                  className="w-5 h-5 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 3v18m9-9H3"
+                  />
+                </svg>
+                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                  <span>{t('event.color')}:</span>
+                  <span
+                    className="h-3 w-3 rounded-full border border-gray-200 dark:border-gray-700"
+                    style={{ backgroundColor: selectedEvent.color }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {selectedEvent.tag_ids && selectedEvent.tag_ids.length > 0 && (
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40 p-4 space-y-2">
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('tag.title')}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {isTagsLoading ? (
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {t('common.loading')}
+                  </span>
+                ) : selectedTags.length > 0 ? (
+                  selectedTags.map((tag) => (
+                    <Badge
+                      key={tag.tag_id}
+                      variant="outline"
+                      className="border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-300"
+                    >
+                      <span
+                        className="mr-2 h-2.5 w-2.5 rounded-full border border-white/60"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      {tag.name}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {t('tag.empty')}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {selectedEvent.content && (
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40 p-4 space-y-2">
+              <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t('event.content')}
+              </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
                 {selectedEvent.content}
               </p>
             </div>
           )}
-        </div>
-
-        <div className="flex gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <Button variant="primary" onClick={handleEdit} className="flex-1">
-            {t('event.edit')}
-          </Button>
-          <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+        </CardContent>
+        <CardFooter className="justify-between">
+          <Button variant="secondary" onClick={() => setShowDeleteConfirm(true)}>
             {t('event.delete')}
           </Button>
-        </div>
-      </div>
+          <Button variant="primary" onClick={handleEdit} className="min-w-[140px]">
+            {t('event.edit')}
+          </Button>
+        </CardFooter>
+      </Card>
 
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center">

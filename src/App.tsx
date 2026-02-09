@@ -40,10 +40,12 @@ function App() {
   const { isAuthenticated, isLoading } = useAuthStore()
 
   useEffect(() => {
+    document.documentElement.classList.remove('dark', 'pink')
     if (theme === 'dark') {
       document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
+    }
+    if (theme === 'pink') {
+      document.documentElement.classList.add('pink')
     }
   }, [theme])
 

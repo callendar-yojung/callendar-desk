@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Desktop Calendar",
-  "version": "0.1.0",
+  "version": "1.2.1",
   "identifier": "com.deskcal.app",
 
   "build": {
@@ -74,6 +74,12 @@
   },
 
   "plugins": {
+    "updater": {
+      "active": true,
+      "dialog": true,
+      "endpoints": ["https://your-update-server.com/desktop-calendar/{{target}}/{{current_version}}"],
+      "pubkey": ""
+    },
     "shell": {
       "open": true
     },

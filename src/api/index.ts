@@ -1,5 +1,6 @@
 export { authApi } from './auth'
 export { taskApi } from './tasks'
+export { tagApi } from './tags'
 export { teamApi } from './teams'
 export { workspaceApi } from './workspaces'
 export { apiClient } from './client'

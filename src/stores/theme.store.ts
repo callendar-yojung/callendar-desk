@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-type Theme = 'light' | 'dark'
+type Theme = 'light' | 'dark' | 'pink'
 
 interface ThemeState {
   theme: Theme
@@ -18,7 +18,10 @@ export const useThemeStore = create<ThemeState>()(
         updateDocumentClass(theme)
       },
       toggleTheme: () => {
-        const newTheme = get().theme === 'light' ? 'dark' : 'light'
+        const themeOrder: Theme[] = ['light', 'dark', 'pink']
+        const current = get().theme
+        const currentIndex = themeOrder.indexOf(current)
+        const newTheme = themeOrder[(currentIndex + 1) % themeOrder.length]
         set({ theme: newTheme })
         updateDocumentClass(newTheme)
       },
@@ -35,9 +38,11 @@ export const useThemeStore = create<ThemeState>()(
 )
 
 function updateDocumentClass(theme: Theme) {
+  document.documentElement.classList.remove('dark', 'pink')
   if (theme === 'dark') {
     document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
+  }
+  if (theme === 'pink') {
+    document.documentElement.classList.add('pink')
   }
 }

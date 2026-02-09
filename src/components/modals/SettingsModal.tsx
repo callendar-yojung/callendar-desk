@@ -240,7 +240,7 @@ type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' 
 
 function SystemTab() {
   const { t, i18n } = useTranslation()
-  const { theme, toggleTheme } = useThemeStore()
+  const { theme, setTheme } = useThemeStore()
   const [autostart, setAutostart] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle')
   const [newVersion, setNewVersion] = useState<string | null>(null)
@@ -312,21 +312,29 @@ function SystemTab() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
-          ) : (
+          ) : theme === 'dark' ? (
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 21s-7-4.35-7-10a4 4 0 017-2.65A4 4 0 0119 11c0 5.65-7 10-7 10z" />
             </svg>
           )
         }
         label={t('settings.theme')}
         action={
-          <button
-            onClick={toggleTheme}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          <select
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'pink')}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
           >
-            {theme === 'light' ? t('theme.dark') : t('theme.light')}
-          </button>
+            <option value="light">{t('theme.light')}</option>
+            <option value="dark">{t('theme.dark')}</option>
+            <option value="pink">{t('theme.pink')}</option>
+          </select>
         }
       />
 

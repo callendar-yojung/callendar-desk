@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { listen } from '@tauri-apps/api/event'
 import { open } from '@tauri-apps/plugin-shell'
 import { fetch } from '@tauri-apps/plugin-http'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useAuthStore, useThemeStore } from '../../stores'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -13,6 +14,8 @@ export function LoginPage() {
   const { theme, toggleTheme } = useThemeStore()
   const [isLoading, setIsLoading] = useState<'kakao' | 'google' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pendingProvider, setPendingProvider] = useState<'kakao' | 'google' | null>(null)
+  const appWindow = getCurrentWindow()
 
   // Deep link 리스너 설정
   useEffect(() => {
@@ -40,6 +43,7 @@ export function LoginPage() {
         const memberId = url.searchParams.get('memberId')
         const nickname = url.searchParams.get('nickname')
         const email = url.searchParams.get('email')
+        const providerParam = url.searchParams.get('provider')
         const errorParam = url.searchParams.get('error')
 
         // 에러 처리
@@ -50,8 +54,8 @@ export function LoginPage() {
           return
         }
 
-        // provider 파라미터 추출 (kakao 또는 google)
-        const provider = url.searchParams.get('provider') || 'kakao'
+        const resolvedProvider =
+          (providerParam as 'kakao' | 'google') || pendingProvider || 'kakao'
 
         // 필수 파라미터 체크
         if (!accessToken || !refreshToken || !memberId) {
@@ -69,7 +73,7 @@ export function LoginPage() {
           memberId,
           nickname,
           email: email || 'N/A',
-          provider,
+          provider: resolvedProvider,
         })
 
         // Member 객체 생성 및 인증 설정
@@ -78,7 +82,7 @@ export function LoginPage() {
             memberId: Number(memberId),
             nickname: nickname || 'User',
             email: email || undefined,
-            provider: provider as 'kakao' | 'google',
+            provider: resolvedProvider,
           },
           accessToken,
           refreshToken
@@ -86,10 +90,12 @@ export function LoginPage() {
 
         setError(null)
         setIsLoading(null)
+        setPendingProvider(null)
       } catch (err) {
         console.error('❌ Deep link 파싱 에러:', err)
         setError('Failed to process login callback')
         setIsLoading(null)
+        setPendingProvider(null)
       }
     }).then((fn) => {
       unlistenFn = fn
@@ -104,12 +110,21 @@ export function LoginPage() {
         console.log('🔗 Deep link 리스너 해제')
       }
     }
-  }, [setAuth])
+  }, [setAuth, pendingProvider])
+
+  const handleCloseApp = async () => {
+    try {
+      await appWindow.close()
+    } catch (err) {
+      console.error('Failed to close app:', err)
+    }
+  }
 
   const handleOAuthLogin = async (provider: 'kakao' | 'google') => {
     console.log(`🚀 ${provider} 로그인 시작`)
     setIsLoading(provider)
     setError(null)
+    setPendingProvider(provider)
 
     try {
       // 백엔드에서 OAuth URL 가져오기
@@ -134,8 +149,8 @@ export function LoginPage() {
         throw new Error('No authUrl in response')
       }
 
-      // OAuth 로그인 페이지 열기
-      console.log(`🌐 ${provider} 로그인 페이지 열기:`, authUrl)
+      // 로그인 페이지 열기
+      console.log('🌐 로그인 페이지 열기:', authUrl)
       try {
         await open(authUrl)
         console.log('✅ 브라우저 오픈 완료. 로그인 대기 중...')
@@ -149,16 +164,29 @@ export function LoginPage() {
       const errorMessage = err instanceof Error ? err.message : String(err)
       setError(`${t('auth.loginFailed')} (${errorMessage})`)
       setIsLoading(null)
+      setPendingProvider(null)
     }
   }
 
-  const handleKakaoLogin = () => handleOAuthLogin('kakao')
-  const handleGoogleLogin = () => handleOAuthLogin('google')
+  const handleCancelLogin = () => {
+    setIsLoading(null)
+    setError(null)
+    setPendingProvider(null)
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
       <div className="w-full max-w-md">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+        <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8">
+          <button
+            onClick={handleCloseApp}
+            className="absolute right-3 top-3 p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title={t('auth.closeApp', 'Close app')}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
           {/* Logo & Title */}
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -205,59 +233,53 @@ export function LoginPage() {
             </div>
           )}
 
-          {/* Login Buttons */}
-          <div className="space-y-3">
-            {/* Google Login Button */}
-            <button
-              onClick={handleGoogleLogin}
-              disabled={!!isLoading}
-              className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-white hover:bg-gray-50 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium rounded-xl border border-gray-300 dark:border-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading === 'google' ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-700 dark:border-gray-200" />
-              ) : (
-                <>
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                    />
-                  </svg>
-                  <span>{t('auth.googleLogin')}</span>
-                </>
-              )}
-            </button>
+          {/* Kakao Login Button */}
+          <button
+            onClick={() => handleOAuthLogin('kakao')}
+            disabled={!!isLoading}
+            className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-[#FEE500] hover:bg-[#FDD800] text-[#191919] font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading === 'kakao' ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#191919]" />
+            ) : (
+              <>
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 3C6.477 3 2 6.463 2 10.691c0 2.678 1.785 5.035 4.478 6.378-.143.521-.921 3.358-.953 3.585 0 0-.019.159.084.22.103.06.226.013.226.013.298-.041 3.449-2.259 3.993-2.648.714.103 1.453.156 2.172.156 5.523 0 10-3.463 10-7.704S17.523 3 12 3z" />
+                </svg>
+                <span>{t('auth.kakaoLogin')}</span>
+              </>
+            )}
+          </button>
 
-            {/* Kakao Login Button */}
+          {/* Google Login Button */}
+          <button
+            onClick={() => handleOAuthLogin('google')}
+            disabled={!!isLoading}
+            className="mt-3 w-full flex items-center justify-center gap-3 px-6 py-3 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-xl border border-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading === 'google' ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-600" />
+            ) : (
+              <>
+                <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="#EA4335" d="M12 10.2v3.6h5.1c-.2 1.3-1.5 3.8-5.1 3.8-3.1 0-5.6-2.6-5.6-5.6S8.9 6.4 12 6.4c1.8 0 3 .8 3.7 1.5l2.5-2.5C16.7 3.8 14.6 2.8 12 2.8 7.7 2.8 4.2 6.3 4.2 10.6S7.7 18.4 12 18.4c5.2 0 6.5-3.6 6.5-5.4 0-.4 0-.7-.1-1H12z" />
+                  <path fill="#34A853" d="M12 18.4c2.6 0 4.7-.8 6.3-2.1l-2.5-2.1c-.7.5-1.7.9-3.8.9-3.1 0-5.6-2.6-5.6-5.6H4.2v2.1C5.7 15.9 8.6 18.4 12 18.4z" />
+                  <path fill="#4A90E2" d="M18.4 13c.1-.3.1-.6.1-1s0-.7-.1-1H12v2h6.4z" />
+                  <path fill="#FBBC05" d="M6.4 10.6c0-.7.2-1.4.5-2l-2.6-2C3.6 8 3.2 9.3 3.2 10.6s.4 2.6 1.1 3.7l2.6-2c-.3-.6-.5-1.3-.5-2z" />
+                </svg>
+                <span>{t('auth.googleLogin', 'Continue with Google')}</span>
+              </>
+            )}
+          </button>
+
+          {isLoading && (
             <button
-              onClick={handleKakaoLogin}
-              disabled={!!isLoading}
-              className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-[#FEE500] hover:bg-[#FDD800] text-[#191919] font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleCancelLogin}
+              className="mt-3 w-full px-6 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition-colors"
             >
-              {isLoading === 'kakao' ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#191919]" />
-              ) : (
-                <>
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 3C6.477 3 2 6.463 2 10.691c0 2.678 1.785 5.035 4.478 6.378-.143.521-.921 3.358-.953 3.585 0 0-.019.159.084.22.103.06.226.013.226.013.298-.041 3.449-2.259 3.993-2.648.714.103 1.453.156 2.172.156 5.523 0 10-3.463 10-7.704S17.523 3 12 3z" />
-                  </svg>
-                  <span>{t('auth.kakaoLogin')}</span>
-                </>
-              )}
+              {t('auth.cancelLogin', 'Cancel login')}
             </button>
-          </div>
+          )}
 
           {/* Divider */}
           <div className="relative my-6">
@@ -289,7 +311,7 @@ export function LoginPage() {
                   </svg>
                   <span>{t('theme.dark')}</span>
                 </>
-              ) : (
+              ) : theme === 'dark' ? (
                 <>
                   <svg
                     className="w-4 h-4"
@@ -302,6 +324,23 @@ export function LoginPage() {
                       strokeLinejoin="round"
                       strokeWidth={2}
                       d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+                    />
+                  </svg>
+                  <span>{t('theme.pink')}</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 21s-7-4.35-7-10a4 4 0 017-2.65A4 4 0 0119 11c0 5.65-7 10-7 10z"
                     />
                   </svg>
                   <span>{t('theme.light')}</span>

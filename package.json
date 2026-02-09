@@ -1,11 +1,11 @@
 {
   "name": "desktop-calendar",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/sync-version.mjs && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

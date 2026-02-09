@@ -49,6 +49,19 @@ export function CalendarGrid() {
       })
   }
 
+  const getReadableTextColor = (hexColor?: string) => {
+    if (!hexColor || !hexColor.startsWith('#')) return '#1f2937'
+    const hex = hexColor.replace('#', '')
+    const normalized = hex.length === 3
+      ? hex.split('').map((c) => c + c).join('')
+      : hex
+    const r = parseInt(normalized.slice(0, 2), 16)
+    const g = parseInt(normalized.slice(2, 4), 16)
+    const b = parseInt(normalized.slice(4, 6), 16)
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    return luminance > 0.6 ? '#1f2937' : '#ffffff'
+  }
+
   return (
     <div className="flex-1 flex flex-col">
       <div className="grid grid-cols-7 gap-px bg-gray-200 dark:bg-gray-700">
@@ -115,7 +128,11 @@ export function CalendarGrid() {
                       e.stopPropagation()
                       openDetailModal(event)
                     }}
-                    className="w-full text-left px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded truncate hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                    className="w-full text-left px-2 py-1 text-xs rounded truncate transition-opacity hover:opacity-90"
+                    style={{
+                      backgroundColor: event.color || '#93c5fd',
+                      color: getReadableTextColor(event.color),
+                    }}
                   >
                     {event.title}
                   </button>
