@@ -38,14 +38,20 @@ const updateJsonVersion = (filePath) => {
 
 const updateCargoToml = (filePath) => {
   const content = readFileSync(filePath, 'utf8')
-  const updated = content.replace(
-    /version\s*=\s*"[^"]+"/, 
-    `version = "${version}"`
-  )
-  if (updated === content) {
-    console.error(`❌ Failed to update version in ${filePath}`)
+  const versionRegex = /^version\s*=\s*"([^"]+)"/m
+  const match = content.match(versionRegex)
+
+  if (!match) {
+    console.error(`❌ Could not find version in ${filePath}`)
     process.exit(1)
   }
+
+  if (match[1] === version) {
+    console.log(`ℹ️  Version already ${version} in ${filePath}`)
+    return
+  }
+
+  const updated = content.replace(versionRegex, `version = "${version}"`)
   writeFileSync(filePath, updated, 'utf8')
 }
 
