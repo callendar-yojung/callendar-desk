@@ -72,6 +72,9 @@ jobs:
 
       - name: Build Tauri app
         run: npm run tauri:build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Find and prepare artifacts
         id: artifacts
@@ -90,15 +93,22 @@ jobs:
             if [[ -z "$ARTIFACT" ]]; then
               ARTIFACT=$(find src-tauri/target/release/bundle -name "*-setup.exe" -type f 2>/dev/null | head -1 || true)
             fi
+            SIG_FILE=$(find src-tauri/target/release/bundle -name "*.msi.sig" -type f 2>/dev/null | head -1 || true)
+            if [[ -z "$SIG_FILE" ]]; then
+              SIG_FILE=$(find src-tauri/target/release/bundle -name "*-setup.exe.sig" -type f 2>/dev/null | head -1 || true)
+            fi
           else
             # Linux: prefer .AppImage, fallback to .deb
             ARTIFACT=$(find src-tauri/target/release/bundle -name "*.AppImage" -type f 2>/dev/null | head -1 || true)
+            SIG_FILE=$(find src-tauri/target/release/bundle -name "*.AppImage.sig" -type f 2>/dev/null | head -1 || true)
             if [[ -z "$ARTIFACT" ]]; then
               ARTIFACT=$(find src-tauri/target/release/bundle -name "*.deb" -type f 2>/dev/null | head -1 || true)
+              SIG_FILE=$(find src-tauri/target/release/bundle -name "*.deb.sig" -type f 2>/dev/null | head -1 || true)
             fi
           fi
 
           echo "=== Found artifact: $ARTIFACT ==="
+          echo "=== Found signature: $SIG_FILE ==="
 
           if [[ -z "$ARTIFACT" || ! -f "$ARTIFACT" ]]; then
             echo "Error: No artifact found for platform $PLATFORM"
@@ -108,20 +118,109 @@ jobs:
           fi
 
           ARTIFACT_NAME=$(basename "$ARTIFACT")
-          
+
           # Copy artifact to workspace root
           cp "$ARTIFACT" "$GITHUB_WORKSPACE/$ARTIFACT_NAME"
 
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
           echo "ARTIFACT_PATH=$GITHUB_WORKSPACE/$ARTIFACT_NAME" >> $GITHUB_OUTPUT
 
-          echo "=== Artifact prepared: $ARTIFACT_NAME ==="
+          # Handle signature file
+          if [[ -n "$SIG_FILE" && -f "$SIG_FILE" ]]; then
+            SIG_NAME=$(basename "$SIG_FILE")
+            cp "$SIG_FILE" "$GITHUB_WORKSPACE/$SIG_NAME"
+            echo "SIG_NAME=$SIG_NAME" >> $GITHUB_OUTPUT
+            echo "SIG_PATH=$GITHUB_WORKSPACE/$SIG_NAME" >> $GITHUB_OUTPUT
+            SIGNATURE=$(cat "$SIG_FILE")
+            echo "SIGNATURE=$SIGNATURE" >> $GITHUB_OUTPUT
+          fi
+
+          # Calculate file size
+          if [[ "$PLATFORM" == "windows" ]]; then
+            FILE_SIZE=$(powershell -command "(Get-Item '$GITHUB_WORKSPACE/$ARTIFACT_NAME').Length")
+          else
+            FILE_SIZE=$(stat -c%s "$GITHUB_WORKSPACE/$ARTIFACT_NAME")
+          fi
+
+          # Calculate checksum
+          if [[ "$PLATFORM" == "windows" ]]; then
+            CHECKSUM=$(powershell -command "(Get-FileHash '$GITHUB_WORKSPACE/$ARTIFACT_NAME' -Algorithm SHA256).Hash.ToLower()")
+          else
+            CHECKSUM=$(shasum -a 256 "$GITHUB_WORKSPACE/$ARTIFACT_NAME" | cut -d ' ' -f 1)
+          fi
+
+          echo "FILE_SIZE=$FILE_SIZE" >> $GITHUB_OUTPUT
+          echo "CHECKSUM=$CHECKSUM" >> $GITHUB_OUTPUT
+
+          echo "=== Artifact prepared: $ARTIFACT_NAME (${FILE_SIZE} bytes) ==="
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload to S3
+        id: s3_upload
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          PLATFORM=${{ matrix.platform }}
+          ARTIFACT_NAME="${{ steps.artifacts.outputs.ARTIFACT_NAME }}"
+          ARTIFACT_PATH="${{ steps.artifacts.outputs.ARTIFACT_PATH }}"
+
+          S3_PATH="s3://${{ secrets.AWS_S3_BUCKET }}/releases/v${VERSION}/${PLATFORM}/${ARTIFACT_NAME}"
+          aws s3 cp "$ARTIFACT_PATH" "$S3_PATH"
+
+          S3_URL="https://${{ secrets.AWS_S3_BUCKET }}.s3.${{ secrets.AWS_REGION }}.amazonaws.com/releases/v${VERSION}/${PLATFORM}/${ARTIFACT_NAME}"
+          echo "S3_URL=$S3_URL" >> $GITHUB_OUTPUT
+
+          # Upload signature file if exists
+          SIG_NAME="${{ steps.artifacts.outputs.SIG_NAME }}"
+          SIG_PATH="${{ steps.artifacts.outputs.SIG_PATH }}"
+          if [[ -n "$SIG_NAME" && -f "$SIG_PATH" ]]; then
+            aws s3 cp "$SIG_PATH" "s3://${{ secrets.AWS_S3_BUCKET }}/releases/v${VERSION}/${PLATFORM}/${SIG_NAME}"
+          fi
+
+      - name: Save release info to database
+        shell: bash
+        continue-on-error: true
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          PLATFORM=${{ matrix.platform }}
+          ARTIFACT_NAME="${{ steps.artifacts.outputs.ARTIFACT_NAME }}"
+          FILE_SIZE=${{ steps.artifacts.outputs.FILE_SIZE }}
+          CHECKSUM=${{ steps.artifacts.outputs.CHECKSUM }}
+          S3_URL="${{ steps.s3_upload.outputs.S3_URL }}"
+          SIGNATURE="${{ steps.artifacts.outputs.SIGNATURE }}"
+
+          # Escape commit message for JSON
+          RELEASE_NOTES=$(echo "${{ github.event.head_commit.message }}" | head -1 | sed 's/"/\\"/g' | tr -d '\n\r')
+
+          curl -X POST "${{ secrets.API_BASE_URL }}/api/releases" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.API_SECRET_KEY }}" \
+            --fail \
+            -d "{
+              \"version\": \"${VERSION}\",
+              \"platform\": \"${PLATFORM}\",
+              \"fileName\": \"${ARTIFACT_NAME}\",
+              \"downloadUrl\": \"${S3_URL}\",
+              \"fileSize\": ${FILE_SIZE},
+              \"checksum\": \"${CHECKSUM}\",
+              \"signature\": \"${SIGNATURE}\",
+              \"releaseNotes\": \"${RELEASE_NOTES}\",
+              \"isPrerelease\": false
+            }"
 
       - name: Upload artifact for release
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-build
-          path: ${{ steps.artifacts.outputs.ARTIFACT_PATH }}
+          path: |
+            ${{ steps.artifacts.outputs.ARTIFACT_PATH }}
+            ${{ steps.artifacts.outputs.SIG_PATH }}
 
   release:
     needs: build
@@ -147,6 +246,7 @@ jobs:
             artifacts/**/*.exe
             artifacts/**/*.deb
             artifacts/**/*.AppImage
+            artifacts/**/*.sig
           tag_name: v${{ steps.version.outputs.VERSION }}
           name: Release v${{ steps.version.outputs.VERSION }}
           generate_release_notes: true
