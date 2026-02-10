@@ -46,7 +46,8 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            libssl-dev
+            libssl-dev \
+            jq
 
       - name: Install dependencies
         run: npm ci
@@ -61,15 +62,24 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           echo "Updating version to $VERSION"
+          
           # Update version in tauri.conf.json
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            powershell -Command "(Get-Content src-tauri/tauri.conf.json) -replace '\"version\": \"[^\"]*\"', '\"version\": \"${{ steps.version.outputs.VERSION }}\"' | Set-Content src-tauri/tauri.conf.json"
+            # Windows: Use PowerShell with proper JSON handling
+            powershell -Command "
+              \$json = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+              \$json.version = '$VERSION'
+              \$json | ConvertTo-Json -Depth 100 | Set-Content src-tauri/tauri.conf.json
+            "
           else
-            sed -i.bak 's/"version": "[^"]*"/"version": "'$VERSION'"/' src-tauri/tauri.conf.json
-            rm -f src-tauri/tauri.conf.json.bak
+            # Linux/macOS: Use jq for proper JSON handling
+            jq --arg ver "$VERSION" '.version = $ver' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp
+            mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
           fi
+          
           # Verify the change
-          grep '"version"' src-tauri/tauri.conf.json
+          echo "Updated version:"
+          grep -A 1 '"version"' src-tauri/tauri.conf.json | head -2
 
       - name: Build Tauri app
         run: npm run tauri:build
