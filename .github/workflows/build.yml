@@ -15,12 +15,9 @@ jobs:
           - os: windows-latest
             platform: windows
             arch: x86_64
-          - os: macos-14
-            platform: macos
-            arch: aarch64
-#          - os: ubuntu-22.04
-#            platform: linux
-#            arch: x86_64
+          - os: ubuntu-22.04
+            platform: linux
+            arch: x86_64
 
     steps:
       - name: Checkout repo
@@ -113,12 +110,12 @@ jobs:
               SIG_FILE=$(find src-tauri/target/release -name "*.app.tar.gz.sig" -type f 2>/dev/null | head -1 || true)
             fi
           else
-            # Linux: prefer .deb, fallback to .AppImage
-            ARTIFACT=$(find src-tauri/target/release -name "*.deb" -type f 2>/dev/null | head -1 || true)
-            SIG_FILE=$(find src-tauri/target/release -name "*.deb.sig" -type f 2>/dev/null | head -1 || true)
+            # Linux: prefer .AppImage, fallback to .deb
+            ARTIFACT=$(find src-tauri/target/release -name "*.AppImage" -type f 2>/dev/null | head -1 || true)
+            SIG_FILE=$(find src-tauri/target/release -name "*.AppImage.sig" -type f 2>/dev/null | head -1 || true)
             if [[ -z "$ARTIFACT" ]]; then
-              ARTIFACT=$(find src-tauri/target/release -name "*.AppImage" -type f 2>/dev/null | head -1 || true)
-              SIG_FILE=$(find src-tauri/target/release -name "*.AppImage.sig" -type f 2>/dev/null | head -1 || true)
+              ARTIFACT=$(find src-tauri/target/release -name "*.deb" -type f 2>/dev/null | head -1 || true)
+              SIG_FILE=$(find src-tauri/target/release -name "*.deb.sig" -type f 2>/dev/null | head -1 || true)
             fi
           fi
 

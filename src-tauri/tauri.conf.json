@@ -73,12 +73,6 @@
     }
   },
   "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://trabien.com/api/releases/update/{{target}}/{{arch}}/{{current_version}}"
-      ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJGNTQzRTYxQjU4MDBENzQKUldSMERZQzFZVDVVTDhxVHFqaUIzbjE2OXk5QmdRR2lVdVJLWWdDNWZUeU5DVlVGcTBSVDVhSXgK"
-    },
     "shell": {
       "open": true
     },
