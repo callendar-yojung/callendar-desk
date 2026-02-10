@@ -1,9 +1,13 @@
 /// Win32 Desktop Attachment — 바탕화면 위젯 (항상 최하위 Z-order)
 
+#[cfg(target_os = "windows")]
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 
+#[cfg(target_os = "windows")]
 static IS_DESKTOP_MODE: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "windows")]
 static ORIGINAL_EXSTYLE: AtomicIsize = AtomicIsize::new(0);
+#[cfg(target_os = "windows")]
 static KEEP_BOTTOM: AtomicBool = AtomicBool::new(false);
 
 #[cfg(target_os = "windows")]
