@@ -1,6 +1,43 @@
 import { create } from 'zustand'
 import type { Mode, Workspace, Team } from '../types'
 
+// localStorage key for workspace order
+const getOrderKey = (mode: Mode, teamId: number | null) =>
+  mode === 'PERSONAL' ? 'ws_order_personal' : `ws_order_team_${teamId}`
+
+const loadOrder = (mode: Mode, teamId: number | null): number[] => {
+  try {
+    const raw = localStorage.getItem(getOrderKey(mode, teamId))
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+const saveOrder = (mode: Mode, teamId: number | null, ids: number[]) => {
+  localStorage.setItem(getOrderKey(mode, teamId), JSON.stringify(ids))
+}
+
+const applySavedOrder = (workspaces: Workspace[], mode: Mode, teamId: number | null): Workspace[] => {
+  const savedIds = loadOrder(mode, teamId)
+  if (savedIds.length === 0) return workspaces
+
+  const wsMap = new Map(workspaces.map(ws => [ws.workspace_id, ws]))
+  const ordered: Workspace[] = []
+
+  // Add workspaces in saved order
+  for (const id of savedIds) {
+    const ws = wsMap.get(id)
+    if (ws) {
+      ordered.push(ws)
+      wsMap.delete(id)
+    }
+  }
+  // Append any new workspaces not in saved order
+  for (const ws of wsMap.values()) {
+    ordered.push(ws)
+  }
+  return ordered
+}
+
 interface WorkspaceState {
   currentMode: Mode
   selectedTeamId: number | null
@@ -18,6 +55,7 @@ interface WorkspaceState {
   addWorkspace: (workspace: Workspace) => void
   updateWorkspaceInStore: (workspaceId: number, name: string) => void
   removeWorkspace: (workspaceId: number) => void
+  moveWorkspace: (workspaceId: number, direction: 'up' | 'down') => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   toggleDropdown: () => void
@@ -46,13 +84,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   setWorkspaces: (workspaces) =>
       set((state) => {
+        const ordered = applySavedOrder(workspaces, state.currentMode, state.selectedTeamId)
         // 현재 선택이 새 목록에 있으면 유지, 아니면 첫 번째 자동 선택
         const stillExists = state.selectedWorkspaceId != null
-          && workspaces.some((ws) => ws.workspace_id === state.selectedWorkspaceId)
+          && ordered.some((ws) => ws.workspace_id === state.selectedWorkspaceId)
         const selectedWorkspaceId = stillExists
           ? state.selectedWorkspaceId
-          : workspaces.length > 0 ? workspaces[0].workspace_id : null
-        return { workspaces, selectedWorkspaceId }
+          : ordered.length > 0 ? ordered[0].workspace_id : null
+        return { workspaces: ordered, selectedWorkspaceId }
       }),
 
   selectWorkspace: (workspaceId) => set({ selectedWorkspaceId: workspaceId }),
@@ -70,6 +109,21 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       selectedWorkspaceId:
         state.selectedWorkspaceId === workspaceId ? null : state.selectedWorkspaceId,
     })),
+  moveWorkspace: (workspaceId, direction) =>
+    set((state) => {
+      const idx = state.workspaces.findIndex((ws) => ws.workspace_id === workspaceId)
+      if (idx === -1) return state
+      const newIdx = direction === 'up' ? idx - 1 : idx + 1
+      if (newIdx < 0 || newIdx >= state.workspaces.length) return state
+
+      const newList = [...state.workspaces]
+      ;[newList[idx], newList[newIdx]] = [newList[newIdx], newList[idx]]
+
+      // Persist order
+      saveOrder(state.currentMode, state.selectedTeamId, newList.map(ws => ws.workspace_id))
+
+      return { workspaces: newList }
+    }),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
   toggleDropdown: () => set((state) => ({ isDropdownOpen: !state.isDropdownOpen })),

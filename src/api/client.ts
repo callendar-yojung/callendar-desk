@@ -137,6 +137,84 @@ class ApiClient {
   delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE' })
   }
+
+  async upload<T>(endpoint: string, file: File, fields: Record<string, string>, isRetry = false): Promise<T> {
+    const url = `${this.baseUrl}${endpoint}`
+
+    // Content-Type은 설정하지 않음 — Tauri fetch가 FormData boundary를 자동 생성
+    const headers: Record<string, string> = {}
+
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`
+    }
+
+    console.log('🚀 API Upload:', { url, fileName: file.name, fileSize: file.size, fields })
+
+    // File을 메모리로 읽어 Blob으로 변환 (Tauri IPC 호환)
+    const arrayBuffer = await file.arrayBuffer()
+    const blob = new Blob([arrayBuffer], { type: file.type || 'application/octet-stream' })
+
+    const formData = new FormData()
+    formData.append('file', blob, file.name)
+    for (const [key, value] of Object.entries(fields)) {
+      formData.append(key, value)
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
+      })
+
+      console.log('📥 API Upload Response Status:', {
+        url,
+        status: response.status,
+        ok: response.ok,
+      })
+
+      const responseText = await response.text()
+      console.log('📄 API Upload Response Body:', responseText)
+
+      if (!response.ok) {
+        if (
+          response.status === 401 &&
+          this.refreshHandler &&
+          !isRetry &&
+          !endpoint.includes('/api/auth/external/refresh')
+        ) {
+          try {
+            const refreshed = await this.refreshHandler()
+            if (refreshed?.accessToken) {
+              this.setAccessToken(refreshed.accessToken)
+              return this.upload<T>(endpoint, file, fields, true)
+            }
+          } catch (refreshError) {
+            console.error('❌ Token refresh failed:', refreshError)
+          }
+        }
+
+        let errorMessage = `API Error: ${response.status} ${response.statusText}`
+        try {
+          const errorData = JSON.parse(responseText)
+          errorMessage = errorData.error || errorData.message || errorMessage
+        } catch {
+          // ignore parse error
+        }
+        throw new Error(errorMessage)
+      }
+
+      const data = JSON.parse(responseText)
+      console.log('✅ API Upload Success:', data)
+      return data
+    } catch (error) {
+      console.error('❌ API Upload Failed:', {
+        url,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+      throw error
+    }
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL)

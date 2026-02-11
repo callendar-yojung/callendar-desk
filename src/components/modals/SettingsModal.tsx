@@ -1,13 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { invoke } from '@tauri-apps/api/core'
-import { check } from '@tauri-apps/plugin-updater'
-import { relaunch } from '@tauri-apps/plugin-process'
-import { useModalStore, useAuthStore, useThemeStore } from '../../stores'
-import { authApi } from '../../api'
-import { getVersion } from '@tauri-apps/api/app'
+import { useModalStore, useAuthStore, useThemeStore, useWorkspaceStore } from '../../stores'
+import { authApi, usageApi, subscriptionApi } from '../../api'
+import type { UsageData, Subscription, SubscriptionStatus } from '../../types'
 
-type SettingsTab = 'profile' | 'system'
+type SettingsTab = 'profile' | 'system' | 'planUsage'
 
 export function SettingsModal() {
   const { t } = useTranslation()
@@ -45,6 +43,16 @@ export function SettingsModal() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'planUsage',
+      label: t('settings.planUsage'),
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
       ),
     },
@@ -95,7 +103,7 @@ export function SettingsModal() {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-5">
-            {tab === 'profile' ? <ProfileTab /> : <SystemTab />}
+            {tab === 'profile' ? <ProfileTab /> : tab === 'system' ? <SystemTab /> : <PlanUsageTab />}
           </div>
         </div>
       </div>
@@ -236,23 +244,15 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 // ── 시스템 설정 탭 ──────────────────────────────────────────────
 
-type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'upToDate' | 'error'
-
 function SystemTab() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useThemeStore()
   const [autostart, setAutostart] = useState(false)
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle')
-  const [newVersion, setNewVersion] = useState<string | null>(null)
-  const [currentVersion, setCurrentVersion] = useState<string>('')
-  const [downloadProgress, setDownloadProgress] = useState(0)
-  const updateRef = useRef<Awaited<ReturnType<typeof check>> | null>(null)
 
   useEffect(() => {
     invoke<boolean>('get_autostart')
       .then(setAutostart)
       .catch(console.error)
-    getVersion().then(setCurrentVersion).catch(console.error)
   }, [])
 
   const toggleAutostart = async () => {
@@ -266,41 +266,6 @@ function SystemTab() {
 
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'ko' ? 'en' : 'ko')
-  }
-
-  const checkForUpdates = async () => {
-    setUpdateStatus('checking')
-    try {
-      const update = await check()
-      if (update) {
-        setNewVersion(update.version)
-        setUpdateStatus('available')
-        updateRef.current = update
-      } else {
-        setUpdateStatus('upToDate')
-      }
-    } catch (err) {
-      console.error('Update check failed:', err)
-      setUpdateStatus('error')
-    }
-  }
-
-  const downloadAndInstall = async () => {
-    if (!updateRef.current) return
-    setUpdateStatus('downloading')
-    try {
-      await updateRef.current.downloadAndInstall((event) => {
-        if (event.event === 'Progress') {
-          const progress = (event.data.chunkLength / event.data.contentLength) * 100
-          setDownloadProgress(progress)
-        }
-      })
-      setUpdateStatus('ready')
-      await relaunch()
-    } catch (err) {
-      console.error('Download failed:', err)
-      setUpdateStatus('error')
-    }
   }
 
   return (
@@ -380,48 +345,6 @@ function SystemTab() {
         }
       />
 
-      <SettingRow
-        icon={
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-        }
-        label={`${t('update.label')} (v${currentVersion})`}
-        action={
-          <div className="flex items-center gap-2">
-            {updateStatus === 'checking' && (
-              <span className="text-xs text-gray-500">{t('update.checking')}</span>
-            )}
-            {updateStatus === 'upToDate' && (
-              <span className="text-xs text-green-500">{t('update.upToDate')}</span>
-            )}
-            {updateStatus === 'available' && (
-              <button
-                onClick={downloadAndInstall}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors"
-              >
-                {t('update.install')} (v{newVersion})
-              </button>
-            )}
-            {updateStatus === 'downloading' && (
-              <span className="text-xs text-blue-500">{t('update.downloading')} {Math.round(downloadProgress)}%</span>
-            )}
-            {updateStatus === 'error' && (
-              <span className="text-xs text-red-500">{t('update.failed')}</span>
-            )}
-            {(updateStatus === 'idle' || updateStatus === 'error' || updateStatus === 'upToDate') && (
-              <button
-                onClick={checkForUpdates}
-                disabled={updateStatus === 'checking'}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
-              >
-                {t('update.checkUpdate')}
-              </button>
-            )}
-          </div>
-        }
-      />
     </div>
   )
 }
@@ -442,6 +365,216 @@ function SettingRow({
         <span className="text-sm">{label}</span>
       </div>
       {action}
+    </div>
+  )
+}
+
+// ── Plan & Usage 탭 ─────────────────────────────────────────────
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+function getBarColor(ratio: number): string {
+  if (ratio >= 0.9) return 'bg-red-500'
+  if (ratio >= 0.7) return 'bg-yellow-500'
+  return 'bg-green-500'
+}
+
+function getStatusStyle(status: SubscriptionStatus | null): { bg: string; text: string } {
+  switch (status) {
+    case 'active': return { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-300' }
+    case 'trialing': return { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300' }
+    case 'canceled': return { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-300' }
+    case 'expired': return { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-300' }
+    default: return { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-600 dark:text-gray-300' }
+  }
+}
+
+function getStatusLabel(status: SubscriptionStatus | null, t: (key: string) => string): string {
+  switch (status) {
+    case 'active': return t('settings.plan.active')
+    case 'trialing': return t('settings.plan.trialing')
+    case 'canceled': return t('settings.plan.canceled')
+    case 'expired': return t('settings.plan.expired')
+    default: return t('settings.plan.noPlan')
+  }
+}
+
+function PlanBadge({ planName, subscription, workspaceName }: {
+  planName: string
+  subscription: Subscription | null
+  workspaceName: string
+}) {
+  const { t } = useTranslation()
+  const isBasic = !subscription || subscription.status === 'expired' || subscription.status === 'canceled'
+  const displayPlan = isBasic ? t('settings.plan.basic') : planName
+  const statusStyle = getStatusStyle(subscription?.status ?? null)
+
+  return (
+    <div className={`p-3 rounded-lg border ${
+      isBasic
+        ? 'bg-gray-50 dark:bg-gray-700/40 border-gray-200 dark:border-gray-600'
+        : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+    }`}>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.plan.current')}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className={`text-sm font-semibold ${
+              isBasic ? 'text-gray-700 dark:text-gray-200' : 'text-blue-700 dark:text-blue-300'
+            }`}>{displayPlan}</p>
+            <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${statusStyle.bg} ${statusStyle.text}`}>
+              {getStatusLabel(subscription?.status ?? null, t)}
+            </span>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-gray-500 dark:text-gray-400">{t('settings.plan.workspace')}</p>
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate max-w-[120px]">{workspaceName}</p>
+        </div>
+      </div>
+      {subscription && subscription.status === 'active' && subscription.expires_at && (
+        <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+          <InfoRow
+            label={t('settings.plan.expiresAt')}
+            value={new Date(subscription.expires_at).toLocaleDateString()}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function UsageSection({ label, used, limit, detail, formatFn }: {
+  label: string
+  used: number
+  limit: number
+  detail?: string
+  formatFn?: (v: number) => string
+}) {
+  const ratio = limit > 0 ? used / limit : 0
+  const fmt = formatFn || String
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{label}</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          {fmt(used)} / {fmt(limit)}
+          {detail && <span className="ml-1.5 text-gray-400 dark:text-gray-500">({detail})</span>}
+        </span>
+      </div>
+      <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${getBarColor(ratio)}`}
+          style={{ width: `${Math.min(ratio * 100, 100)}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ label, value, sub }: { label: string; value: number; sub?: string }) {
+  return (
+    <div className="flex flex-col items-center p-2 rounded-lg bg-gray-50 dark:bg-gray-700/40">
+      <span className="text-lg font-bold text-gray-900 dark:text-gray-100">{value}</span>
+      <span className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight text-center">{label}</span>
+      {sub && <span className="text-[9px] text-gray-400 dark:text-gray-500">{sub}</span>}
+    </div>
+  )
+}
+
+function PlanUsageTab() {
+  const { t } = useTranslation()
+  const { selectedWorkspaceId, currentMode } = useWorkspaceStore()
+  const [usage, setUsage] = useState<UsageData | null>(null)
+  const [subscription, setSubscription] = useState<Subscription | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!selectedWorkspaceId) return
+    setLoading(true)
+    setError(null)
+
+    const fetchUsage = usageApi.getUsage(selectedWorkspaceId).then(setUsage)
+    const fetchSub = subscriptionApi.getSubscription()
+      .then((res) => setSubscription(res.subscription))
+      .catch(() => setSubscription(null))
+
+    Promise.all([fetchUsage, fetchSub])
+      .catch(() => setError(t('common.error')))
+      .finally(() => setLoading(false))
+  }, [selectedWorkspaceId, t])
+
+  if (!selectedWorkspaceId) {
+    return (
+      <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">
+        {t('settings.usage.noWorkspace')}
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">
+        {t('common.loading')}
+      </div>
+    )
+  }
+
+  if (error || !usage) {
+    return (
+      <div className="flex items-center justify-center h-full text-sm text-red-400">
+        {error || t('common.error')}
+      </div>
+    )
+  }
+
+  const isTeam = currentMode === 'TEAM'
+  const planName = subscription?.plan_name || usage.plan.plan_name
+
+  return (
+    <div className="space-y-4">
+      <PlanBadge planName={planName} subscription={subscription} workspaceName={usage.workspace_name} />
+
+      <UsageSection
+        label={t('settings.usage.storage')}
+        used={usage.storage.used_bytes}
+        limit={usage.storage.limit_bytes}
+        detail={t('settings.usage.files', { count: usage.storage.file_count })}
+        formatFn={formatBytes}
+      />
+
+      {isTeam && (
+        <UsageSection
+          label={t('settings.usage.members')}
+          used={usage.members.current}
+          limit={usage.members.max}
+        />
+      )}
+
+      {/* Task Activity */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{t('settings.usage.tasks')}</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {t('settings.usage.totalTasks', { count: usage.tasks.total })}
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-2">
+          <StatCard label={t('settings.usage.created')} value={usage.tasks.created_this_month} sub={t('settings.usage.thisMonth')} />
+          <StatCard label={t('settings.usage.completed')} value={usage.tasks.completed_this_month} sub={t('settings.usage.thisMonth')} />
+          <StatCard label={t('settings.usage.todo')} value={usage.tasks.todo} />
+          <StatCard label={t('settings.usage.inProgress')} value={usage.tasks.in_progress} />
+        </div>
+      </div>
+
+      <InfoRow label={t('settings.plan.maxFileSize')} value={formatBytes(usage.plan.max_file_size_bytes)} />
     </div>
   )
 }

@@ -17,6 +17,7 @@ export function WorkspaceList() {
     addWorkspace,
     updateWorkspaceInStore,
     removeWorkspace,
+    moveWorkspace,
     isLoading,
   } = useWorkspaceStore()
 
@@ -174,12 +175,19 @@ export function WorkspaceList() {
             {getModeTitle()}
           </h3>
           <button
-              onClick={() => setIsAdding(true)}
+              onClick={() => {
+                if (isAdding) {
+                  setIsAdding(false)
+                  setName('')
+                } else {
+                  setIsAdding(true)
+                }
+              }}
               className="p-1 rounded-lg text-gray-500 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               title={t('workspace.create')}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isAdding ? "M20 12H4" : "M12 4v16m8-8H4"} />
             </svg>
           </button>
         </div>
@@ -270,25 +278,56 @@ export function WorkspaceList() {
                       </button>
                     )}
 
-                    {/* 삭제 버튼 */}
+                    {/* 위치 이동 & 삭제 버튼 */}
                     {editingId !== ws.workspace_id && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          deleteWorkspace(ws.workspace_id, ws.name)
-                        }}
-                        disabled={deletingId === ws.workspace_id}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all disabled:opacity-50"
-                        title={t('workspace.delete')}
-                      >
-                        {deletingId === ws.workspace_id ? (
-                          <div className="w-3 h-3 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                        {/* 위로 이동 */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            moveWorkspace(ws.workspace_id, 'up')
+                          }}
+                          disabled={workspaces.indexOf(ws) === 0}
+                          className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={t('workspace.moveUp')}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                           </svg>
-                        )}
-                      </button>
+                        </button>
+                        {/* 아래로 이동 */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            moveWorkspace(ws.workspace_id, 'down')
+                          }}
+                          disabled={workspaces.indexOf(ws) === workspaces.length - 1}
+                          className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={t('workspace.moveDown')}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        {/* 삭제 */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteWorkspace(ws.workspace_id, ws.name)
+                          }}
+                          disabled={deletingId === ws.workspace_id}
+                          className="p-0.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+                          title={t('workspace.delete')}
+                        >
+                          {deletingId === ws.workspace_id ? (
+                            <div className="w-3 h-3 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
                     )}
                   </div>
               ))}

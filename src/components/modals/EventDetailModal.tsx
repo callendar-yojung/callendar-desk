@@ -5,8 +5,18 @@ import { Modal, Button } from '../common'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { useModalStore, useCalendarStore, useWorkspaceStore, useAuthStore } from '../../stores'
-import { taskApi, tagApi } from '../../api'
-import type { Tag } from '../../types'
+import { taskApi, tagApi, attachmentApi } from '../../api'
+import type { Tag, Attachment } from '../../types'
+
+function getFileIcon(mimeType: string | null) {
+  if (!mimeType) return '📄'
+  if (mimeType.startsWith('image/')) return '🖼️'
+  if (mimeType.includes('pdf')) return '📕'
+  if (mimeType.includes('word') || mimeType.includes('document')) return '📝'
+  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return '📊'
+  if (mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('7z')) return '📦'
+  return '📄'
+}
 
 export function EventDetailModal() {
   const { t } = useTranslation()
@@ -19,6 +29,8 @@ export function EventDetailModal() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [tags, setTags] = useState<Tag[]>([])
   const [isTagsLoading, setIsTagsLoading] = useState(false)
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [isAttachmentsLoading, setIsAttachmentsLoading] = useState(false)
 
   const ownerType = currentMode === 'TEAM' ? 'team' : 'personal'
   const ownerId = currentMode === 'TEAM' ? selectedTeamId : user?.memberId
@@ -40,11 +52,38 @@ export function EventDetailModal() {
     loadTags()
   }, [openedModal, ownerType, ownerId])
 
+  useEffect(() => {
+    const loadAttachments = async () => {
+      if (!selectedEvent || openedModal !== 'DETAIL') return
+      setIsAttachmentsLoading(true)
+      try {
+        const res = await attachmentApi.getAttachments(selectedEvent.id)
+        setAttachments(res.attachments || [])
+      } catch (err) {
+        console.error('Failed to load attachments:', err)
+      } finally {
+        setIsAttachmentsLoading(false)
+      }
+    }
+    loadAttachments()
+  }, [selectedEvent, openedModal])
+
+  const handleOpenFile = async (url: string) => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell')
+      await open(url)
+    } catch (err) {
+      console.error('Failed to open file:', err)
+      alert(t('file.downloadError'))
+    }
+  }
+
   const handleEdit = () => {
-    openEditModal(selectedEvent)
+    if (selectedEvent) openEditModal(selectedEvent)
   }
 
   const handleDelete = async () => {
+    if (!selectedEvent) return
     setIsDeleting(true)
 
     try {
@@ -218,6 +257,33 @@ export function EventDetailModal() {
               </p>
             </div>
           )}
+
+          {/* 첨부파일 */}
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40 p-4 space-y-2">
+            <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {t('file.title')}
+            </div>
+            {isAttachmentsLoading ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('common.loading')}</p>
+            ) : attachments.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400 italic">{t('file.empty')}</p>
+            ) : (
+              <div className="space-y-1">
+                {attachments.map((att) => (
+                  <button
+                    key={att.attachment_id}
+                    type="button"
+                    onClick={() => handleOpenFile(att.file_path)}
+                    className="w-full flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left"
+                  >
+                    <span>{getFileIcon(att.mime_type)}</span>
+                    <span className="truncate text-gray-700 dark:text-gray-300">{att.original_name}</span>
+                    <span className="flex-shrink-0 text-gray-400 text-xs">({att.file_size_formatted})</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </CardContent>
         <CardFooter className="justify-between">
           <Button variant="secondary" onClick={() => setShowDeleteConfirm(true)}>

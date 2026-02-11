@@ -62,6 +62,7 @@ export interface CreateTaskPayload {
   content?: string
   color: string
   tag_ids: number[]
+  file_ids?: number[]
   status?: TaskStatus | BackendTaskStatus
   workspace_id: number
 }
@@ -113,6 +114,14 @@ export interface TasksResponse {
   tasks: Task[]
 }
 
+export interface PaginatedTasksResponse {
+  tasks: Task[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
 export interface TagsResponse {
   tags: Tag[]
 }
@@ -158,6 +167,100 @@ export interface RefreshTokenResponse {
 
 export interface MeResponse {
   user: Member
+}
+
+// File types
+export interface FileInfo {
+  file_id: number
+  original_name: string
+  file_path: string
+  file_size: number
+  file_size_formatted: string
+  mime_type: string | null
+}
+
+export interface Attachment {
+  attachment_id: number
+  task_id: number
+  file_id: number
+  original_name: string
+  file_path: string
+  file_size: number
+  file_size_formatted: string
+  mime_type: string | null
+  created_at: string
+}
+
+export interface FilesResponse { files: FileInfo[] }
+export interface FilesPaginatedResponse {
+  files: FileInfo[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+    hasNext: boolean
+    hasPrev: boolean
+  }
+  stats: {
+    total: number
+    images: number
+    documents: number
+    others: number
+  }
+}
+export interface FileUploadResponse { file: FileInfo }
+export interface AttachmentsResponse { attachments: Attachment[] }
+export interface DeleteAttachmentResponse { success: boolean }
+
+// Subscription types
+export type SubscriptionStatus = 'active' | 'canceled' | 'expired' | 'trialing'
+
+export interface Subscription {
+  subscription_id: number
+  plan_name: string
+  status: SubscriptionStatus
+  started_at: string
+  expires_at: string
+}
+
+export interface SubscriptionResponse {
+  subscription: Subscription | null
+}
+
+// Usage types
+export interface UsagePlan {
+  plan_name: string
+  max_storage_bytes: number
+  max_file_size_bytes: number
+  max_members: number
+}
+
+export interface UsageStorage {
+  used_bytes: number
+  limit_bytes: number
+  file_count: number
+}
+
+export interface UsageMembers {
+  current: number
+  max: number
+}
+
+export interface UsageTasks {
+  total: number
+  created_this_month: number
+  completed_this_month: number
+  todo: number
+  in_progress: number
+}
+
+export interface UsageData {
+  plan: UsagePlan
+  storage: UsageStorage
+  members: UsageMembers
+  tasks: UsageTasks
+  workspace_name: string
 }
 
 // Mode type

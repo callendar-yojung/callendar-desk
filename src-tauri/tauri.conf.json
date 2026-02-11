@@ -82,6 +82,10 @@
           "deskcal"
         ]
       }
+    },
+    "updater": {
+      "endpoints": [],
+      "pubkey": ""
     }
   }
 }

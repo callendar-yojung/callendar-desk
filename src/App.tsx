@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Sidebar } from './components/sidebar'
 import { Calendar } from './components/calendar'
+import { TaskListView, FileListView } from './components/views'
 import { TitleBar } from './components/common'
 import {
   EventDetailModal,
@@ -11,7 +12,20 @@ import {
 } from './components/modals'
 import { LoginPage } from './components/auth'
 import { useWorkspaces } from './hooks'
-import { useThemeStore, useAuthStore } from './stores'
+import { useThemeStore, useAuthStore, useViewStore } from './stores'
+
+function MainContent() {
+  const { activeView } = useViewStore()
+
+  switch (activeView) {
+    case 'tasks':
+      return <TaskListView />
+    case 'files':
+      return <FileListView />
+    default:
+      return <Calendar />
+  }
+}
 
 function AppContent() {
   useWorkspaces()
@@ -22,7 +36,7 @@ function AppContent() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main className="flex-1 flex flex-col overflow-hidden">
-          <Calendar />
+          <MainContent />
         </main>
       </div>
 
