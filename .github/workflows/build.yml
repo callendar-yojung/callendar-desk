@@ -67,7 +67,7 @@ jobs:
           # Create metadata.json for signing
           @{
             Endpoint = "https://krc.codesigning.azure.net"
-            CodeSigningAccountName = "callendarsigning"
+            CodeSigningAccountName = "callendsigning"
             CertificateProfileName = "DesktopCalendarProfile"
             ExcludeCredentials = @(
               "ManagedIdentityCredential"
