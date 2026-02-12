@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use tauri::Manager;
 
 const STATE_FILE: &str = "window_state.json";
+const MIN_WIDTH: f64 = 640.0;
+const MIN_HEIGHT: f64 = 480.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowState {
@@ -71,8 +73,11 @@ pub fn save_position(app: &tauri::AppHandle, x: f64, y: f64) {
     });
 }
 
-/// 크기 저장
+/// 크기 저장 (최소 크기 미만이면 무시)
 pub fn save_size(app: &tauri::AppHandle, width: f64, height: f64) {
+    if width < MIN_WIDTH || height < MIN_HEIGHT {
+        return;
+    }
     update_state(app, |s| {
         s.width = width;
         s.height = height;
@@ -110,8 +115,17 @@ pub fn get_window_opacity(app: tauri::AppHandle) -> f64 {
 
 /// setup에서 호출 — 위치 + 크기 + 투명도 복원
 pub fn restore_state(app: &tauri::AppHandle) {
-    if let Some(state) = load_state(app) {
-        if let Some(window) = app.get_webview_window("main") {
+    let window = match app.get_webview_window("main") {
+        Some(w) => w,
+        None => return,
+    };
+
+    match load_state(app) {
+        Some(state) => {
+            // 최소 크기 보장
+            let width = state.width.max(MIN_WIDTH);
+            let height = state.height.max(MIN_HEIGHT);
+
             // 위치 복원
             let _ = window.set_position(tauri::Position::Physical(
                 tauri::PhysicalPosition {
@@ -123,14 +137,30 @@ pub fn restore_state(app: &tauri::AppHandle) {
             // 크기 복원
             let _ = window.set_size(tauri::Size::Physical(
                 tauri::PhysicalSize {
-                    width: state.width as u32,
-                    height: state.height as u32,
+                    width: width as u32,
+                    height: height as u32,
                 },
             ));
 
             log::info!(
                 "state: restored pos({}, {}), size({}x{}), opacity({}%)",
-                state.x, state.y, state.width, state.height, state.opacity
+                state.x, state.y, width, height, state.opacity
+            );
+        }
+        None => {
+            // 첫 실행: 기본 크기를 명시적으로 설정하고 화면 중앙에 배치
+            let _ = window.set_size(tauri::Size::Logical(
+                tauri::LogicalSize {
+                    width: default_width(),
+                    height: default_height(),
+                },
+            ));
+            let _ = window.center();
+
+            log::info!(
+                "state: first launch — centered with default size ({}x{})",
+                default_width(),
+                default_height()
             );
         }
     }
