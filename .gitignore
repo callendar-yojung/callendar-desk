@@ -18,6 +18,13 @@ dist-ssr
 .env.development.local
 .env.production.local
 
+# Signing tools (downloaded via NuGet)
+signing-tools/
+
+# Temporary scripts
+*.ps1
+!src-tauri/sign.ps1
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

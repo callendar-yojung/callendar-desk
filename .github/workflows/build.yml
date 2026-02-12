@@ -52,6 +52,44 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Azure Signing (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          # Login to Azure with service principal
+          az login --service-principal -u "${{ secrets.AZURE_CLIENT_ID }}" -p "${{ secrets.AZURE_CLIENT_SECRET }}" --tenant "${{ secrets.AZURE_TENANT_ID }}"
+
+          # Download nuget.exe and signing dlib
+          New-Item -ItemType Directory -Force -Path signing-tools | Out-Null
+          Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "signing-tools\nuget.exe"
+          & "signing-tools\nuget.exe" install Microsoft.ArtifactSigning.Client -OutputDirectory signing-tools -ExcludeVersion
+
+          # Create metadata.json for signing
+          @{
+            Endpoint = "https://krc.codesigning.azure.net"
+            CodeSigningAccountName = "callendarsigning"
+            CertificateProfileName = "DesktopCalendarProfile"
+            ExcludeCredentials = @(
+              "ManagedIdentityCredential"
+              "WorkloadIdentityCredential"
+              "SharedTokenCacheCredential"
+              "VisualStudioCredential"
+              "VisualStudioCodeCredential"
+              "AzurePowerShellCredential"
+              "AzureDeveloperCliCredential"
+              "InteractiveBrowserCredential"
+              "EnvironmentCredential"
+            )
+          } | ConvertTo-Json | Set-Content "signing-tools\metadata.json"
+
+          # Verify dlib exists
+          if (Test-Path "signing-tools\Microsoft.ArtifactSigning.Client\bin\x64\Azure.CodeSigning.Dlib.dll") {
+            Write-Host "Signing dlib installed successfully"
+          } else {
+            Write-Error "Signing dlib not found"
+            exit 1
+          }
+
       - name: Get version from tag
         id: version
         shell: bash
