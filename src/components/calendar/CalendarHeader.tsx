@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { format, addMonths, subMonths } from 'date-fns'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { useCalendarStore } from '../../stores'
+import { useCalendarStore, useViewStore } from '../../stores'
 import { Button } from '../common'
 
 interface CalendarHeaderProps {
@@ -11,6 +11,7 @@ interface CalendarHeaderProps {
 export function CalendarHeader({ onToggleDrawer }: CalendarHeaderProps) {
   const { t, i18n } = useTranslation()
   const { selectedDate, setSelectedDate } = useCalendarStore()
+  const { openTaskCreate } = useViewStore()
 
   const goToPrevMonth = () => {
     setSelectedDate(subMonths(selectedDate, 1))
@@ -99,6 +100,9 @@ export function CalendarHeader({ onToggleDrawer }: CalendarHeaderProps) {
         </button>
       </div>
       <div className="flex items-center gap-2">
+        <Button variant="primary" size="sm" onClick={() => openTaskCreate(selectedDate)}>
+          {t('calendar.add')}
+        </Button>
         <Button variant="secondary" size="sm" onClick={goToToday}>
           {t('calendar.today')}
         </Button>

@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { format, parseISO } from 'date-fns'
+import { format } from 'date-fns'
 import { Modal, Button } from '../common'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { useModalStore, useCalendarStore, useWorkspaceStore, useAuthStore } from '../../stores'
 import { taskApi, tagApi, attachmentApi } from '../../api'
 import type { Tag, Attachment } from '../../types'
+import { parseApiDateTime } from '../../utils/datetime'
+import RichTextEditor from '../editor/RichTextEditor'
+import { parseRichContent } from '../../utils/richText'
 
 function getFileIcon(mimeType: string | null) {
   if (!mimeType) return '📄'
@@ -100,7 +103,7 @@ export function EventDetailModal() {
   }
 
   const formatDateTime = (dateStr: string) => {
-    const date = parseISO(dateStr)
+    const date = parseApiDateTime(dateStr)
     return format(date, 'yyyy-MM-dd HH:mm')
   }
 
@@ -252,9 +255,12 @@ export function EventDetailModal() {
               <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {t('event.content')}
               </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
-                {selectedEvent.content}
-              </p>
+              <RichTextEditor
+                initialContent={parseRichContent(selectedEvent.content)}
+                readOnly={true}
+                showToolbar={false}
+                contentKey={`detail-${selectedEvent.id}-${selectedEvent.updated_at}`}
+              />
             </div>
           )}
 

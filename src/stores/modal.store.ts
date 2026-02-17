@@ -11,6 +11,7 @@ interface ModalState {
   openCreateModal: (date: Date) => void
   openTeamCreateModal: () => void
   openSettingsModal: () => void
+  openAlarmHistoryModal: () => void
   closeModal: () => void
 }
 
@@ -29,6 +30,8 @@ export const useModalStore = create<ModalState>((set) => ({
     set({ openedModal: 'TEAM_CREATE', selectedEvent: null, createDate: null }),
   openSettingsModal: () =>
     set({ openedModal: 'SETTINGS', selectedEvent: null, createDate: null }),
+  openAlarmHistoryModal: () =>
+    set({ openedModal: 'ALARM_HISTORY', selectedEvent: null, createDate: null }),
   closeModal: () =>
     set({ openedModal: null, selectedEvent: null, createDate: null }),
 }))

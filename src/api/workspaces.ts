@@ -22,6 +22,11 @@ export const workspaceApi = {
   createWorkspace: (data: { name: string; type: 'personal' | 'team'; owner_id?: number }) =>
     apiClient.post<{ success: boolean; workspace: Workspace }>('/api/workspaces', data),
 
+  switchWorkspace: async (workspaceId: number): Promise<Workspace> => {
+    const response = await workspaceApi.getWorkspace(workspaceId)
+    return response.workspace
+  },
+
   updateWorkspace: (id: number, name: string) =>
     apiClient.patch<{ success: boolean; message: string }>(
       `/api/workspaces/${id}`,

@@ -109,12 +109,27 @@ class ApiClient {
         throw new Error('Invalid JSON response')
       }
     } catch (error) {
+      const normalizedError =
+        error instanceof Error
+          ? error
+          : new Error(
+              typeof error === 'string'
+                ? error
+                : (() => {
+                    try {
+                      return JSON.stringify(error)
+                    } catch {
+                      return 'Unknown error'
+                    }
+                  })()
+            )
+
       console.error('❌ API Request Failed:', {
         url,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
+        error: normalizedError.message,
+        stack: normalizedError.stack,
       })
-      throw error
+      throw normalizedError
     }
   }
 
@@ -208,14 +223,28 @@ class ApiClient {
       console.log('✅ API Upload Success:', data)
       return data
     } catch (error) {
+      const normalizedError =
+        error instanceof Error
+          ? error
+          : new Error(
+              typeof error === 'string'
+                ? error
+                : (() => {
+                    try {
+                      return JSON.stringify(error)
+                    } catch {
+                      return 'Unknown error'
+                    }
+                  })()
+            )
+
       console.error('❌ API Upload Failed:', {
         url,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: normalizedError.message,
       })
-      throw error
+      throw normalizedError
     }
   }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL)
-

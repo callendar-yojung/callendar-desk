@@ -26,7 +26,10 @@
         { "url": "http://127.0.0.1:*" },
         { "url": "https://trabien.com/*" },
         { "url": "https://kauth.kakao.com/*" },
-        { "url": "https://kapi.kakao.com/*" }
+        { "url": "https://kapi.kakao.com/*" },
+        { "url": "https://accounts.google.com/*" },
+        { "url": "https://oauth2.googleapis.com/*" },
+        { "url": "https://www.googleapis.com/*" }
       ]
     },
     "updater:default"

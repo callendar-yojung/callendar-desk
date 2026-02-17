@@ -10,15 +10,16 @@ import {
   isSameMonth,
   isSameDay,
   isToday,
-  parseISO,
 } from 'date-fns'
-import { useCalendarStore, useModalStore } from '../../stores'
+import { useCalendarStore, useModalStore, useViewStore } from '../../stores'
 import type { Task } from '../../types'
+import { parseApiDateTime } from '../../utils/datetime'
 
 export function CalendarGrid() {
   const { i18n } = useTranslation()
   const { selectedDate, events } = useCalendarStore()
-  const { openDetailModal, openCreateModal } = useModalStore()
+  const { openDetailModal } = useModalStore()
+  const { openTaskCreate } = useViewStore()
 
   const days = useMemo(() => {
     const monthStart = startOfMonth(selectedDate)
@@ -41,7 +42,7 @@ export function CalendarGrid() {
   const getEventsForDay = (day: Date): Task[] => {
     return events
       .filter((event) => {
-        const eventDate = parseISO(event.start_time)
+        const eventDate = parseApiDateTime(event.start_time)
         return isSameDay(eventDate, day)
       })
       .sort((a, b) => {
@@ -90,7 +91,7 @@ export function CalendarGrid() {
           return (
             <div
               key={day.toISOString()}
-              onClick={() => isCurrentMonth && openCreateModal(day)}
+              onClick={() => isCurrentMonth && openTaskCreate(day)}
               className={`group min-h-[100px] p-2 transition-colors ${
                 isCurrentMonth
                   ? 'bg-white dark:bg-gray-900 hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer'

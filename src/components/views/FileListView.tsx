@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useWorkspaceStore } from '../../stores'
 import { fileApi } from '../../api'
 import type { FileInfo, FilesPaginatedResponse } from '../../types'
+import { getErrorMessage } from '../../utils/error'
 
 const PAGE_SIZE = 20
 
@@ -254,7 +255,7 @@ export function FileListView() {
       if (res.stats) setStats(res.stats)
     } catch (err) {
       console.error('Failed to fetch files:', err)
-      setError(err instanceof Error ? err.message : t('common.error'))
+      setError(getErrorMessage(err, t('common.error')))
       setFiles([])
     } finally {
       setIsLoading(false)

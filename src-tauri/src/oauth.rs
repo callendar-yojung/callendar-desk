@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter, Manager};
 /// OAuth 콜백 데이터
 #[derive(Clone, serde::Serialize)]
 pub struct OAuthCallback {
+    pub provider: Option<String>,
     pub access_token: Option<String>,
     pub refresh_token: Option<String>,
     pub member_id: Option<String>,
@@ -131,6 +132,7 @@ fn parse_oauth_callback(request: &str) -> Option<OAuthCallback> {
     let query = path.split('?').nth(1).unwrap_or("");
 
     let mut callback = OAuthCallback {
+        provider: None,
         access_token: None,
         refresh_token: None,
         member_id: None,
@@ -142,9 +144,12 @@ fn parse_oauth_callback(request: &str) -> Option<OAuthCallback> {
     for param in query.split('&') {
         let mut parts = param.splitn(2, '=');
         let key = parts.next().unwrap_or("");
-        let value = parts.next().map(|v| urlencoding::decode(v).unwrap_or_default().into_owned());
+        let value = parts
+            .next()
+            .map(|v| urlencoding::decode(v).unwrap_or_default().into_owned());
 
         match key {
+            "provider" => callback.provider = value,
             "accessToken" => callback.access_token = value,
             "refreshToken" => callback.refresh_token = value,
             "memberId" => callback.member_id = value,

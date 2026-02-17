@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useWorkspaceStore, useModalStore } from '../../stores'
 import { taskApi } from '../../api'
 import type { Task } from '../../types'
+import { getErrorMessage } from '../../utils/error'
 
 const PAGE_SIZE = 15
 
@@ -67,7 +68,7 @@ export function TaskListView() {
       setTotalPages(res.totalPages || 1)
     } catch (err) {
       console.error('Failed to fetch tasks:', err)
-      setError(err instanceof Error ? err.message : t('common.error'))
+      setError(getErrorMessage(err, t('common.error')))
       setTasks([])
     } finally {
       setIsLoading(false)

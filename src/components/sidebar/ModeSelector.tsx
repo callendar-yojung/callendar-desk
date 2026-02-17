@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useWorkspaceStore, useModalStore } from '../../stores'
-import { teamApi } from '../../api'
 
 export function ModeSelector() {
   const { t } = useTranslation()
@@ -9,7 +8,6 @@ export function ModeSelector() {
     currentMode,
     selectedTeamId,
     teams,
-    setTeams,
     setMode,
     isDropdownOpen,
     toggleDropdown,
@@ -17,20 +15,6 @@ export function ModeSelector() {
   } = useWorkspaceStore()
 
   const dropdownRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    // 팀 목록만 가져옴 (워크스페이스는 useWorkspaces에서 가져옴)
-    const fetchTeams = async () => {
-      try {
-        const teamsRes = await teamApi.getMyTeams()
-        console.log('Teams response:', teamsRes)
-        setTeams(teamsRes.teams || [])
-      } catch (error) {
-        console.error('Failed to fetch teams:', error)
-      }
-    }
-    fetchTeams()
-  }, [setTeams])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

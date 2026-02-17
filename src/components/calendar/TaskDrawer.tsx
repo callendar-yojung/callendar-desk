@@ -1,9 +1,10 @@
 import { useEffect, useRef, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { format, parseISO, isSameDay } from 'date-fns'
+import { format, isSameDay } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { useCalendarStore, useModalStore } from '../../stores'
 import type { TaskStatus } from '../../types'
+import { parseApiDateTime } from '../../utils/datetime'
 
 interface TaskDrawerProps {
   isOpen: boolean
@@ -39,7 +40,7 @@ export function TaskDrawer({ isOpen, onClose }: TaskDrawerProps) {
 
   const tasksForDate = useMemo(() => {
     return events
-      .filter((event) => isSameDay(parseISO(event.start_time), selectedDate))
+      .filter((event) => isSameDay(parseApiDateTime(event.start_time), selectedDate))
       .sort(
         (a, b) =>
           new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
@@ -56,7 +57,7 @@ export function TaskDrawer({ isOpen, onClose }: TaskDrawerProps) {
     return () => document.removeEventListener('keydown', handleEscape)
   }, [isOpen, onClose])
 
-  const formatTime = (dateStr: string) => format(parseISO(dateStr), 'h:mm a')
+  const formatTime = (dateStr: string) => format(parseApiDateTime(dateStr), 'h:mm a')
 
   const dateHeader =
     i18n.language === 'ko'

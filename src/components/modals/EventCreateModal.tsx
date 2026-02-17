@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format, setHours, setMinutes } from 'date-fns'
-import { Modal, Button, Input, TextArea } from '../common'
+import { Modal, Button, Input } from '../common'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { useModalStore, useCalendarStore, useWorkspaceStore, useAuthStore } from '../../stores'
 import { taskApi, tagApi, fileApi } from '../../api'
 import type { TaskStatus, Tag, FileInfo } from '../../types'
+import RichTextEditor from '../editor/RichTextEditor'
+import { EMPTY_RICH_CONTENT, serializeRichContent } from '../../utils/richText'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
@@ -33,7 +35,7 @@ export function EventCreateModal() {
   const { user } = useAuthStore()
 
   const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
+  const [contentDoc, setContentDoc] = useState<Record<string, unknown>>(EMPTY_RICH_CONTENT)
   const [startHour, setStartHour] = useState(9)
   const [startMinute, setStartMinute] = useState(0)
   const [endHour, setEndHour] = useState(10)
@@ -67,7 +69,7 @@ export function EventCreateModal() {
       setEndHour(10)
       setEndMinute(0)
       setTitle('')
-      setContent('')
+      setContentDoc(EMPTY_RICH_CONTENT)
       setStatus('todo')
       setColor('#3b82f6')
       setSelectedTagIds([])
@@ -153,9 +155,11 @@ export function EventCreateModal() {
 
       const backendStatus = backendStatusMap[status]
 
+      const serializedContent = serializeRichContent(contentDoc)
+
       const taskData = {
         title: title.trim(),
-        content: content.trim() || undefined,
+        content: serializedContent || undefined,
         start_time: toMysqlDatetime(startDatetime),
         end_time: toMysqlDatetime(endDatetime),
         color,
@@ -172,7 +176,7 @@ export function EventCreateModal() {
       const newTask = {
         id: response.taskId,
         title: title.trim(),
-        content: content.trim() || undefined,
+        content: serializedContent || undefined,
         color,
         tag_ids: selectedTagIds,
         start_time: startDatetime.toISOString(),
@@ -319,12 +323,17 @@ export function EventCreateModal() {
                 </div>
               </div>
 
-              <TextArea
-                label={t('event.content')}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                rows={2}
-              />
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {t('event.content')}
+                </label>
+                <RichTextEditor
+                  initialContent={contentDoc}
+                  onChange={setContentDoc}
+                  contentKey={`create-${createDate.toISOString()}`}
+                  showToolbar={true}
+                />
+              </div>
             </div>
 
             {/* 태그 */}

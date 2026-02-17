@@ -1,7 +1,11 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import { listen } from '@tauri-apps/api/event'
+import { ask } from '@tauri-apps/plugin-dialog'
+import { invoke } from '@tauri-apps/api/core'
 import { Sidebar } from './components/sidebar'
 import { Calendar } from './components/calendar'
-import { TaskListView, FileListView } from './components/views'
+import { TaskListView, FileListView, MemoView, TaskCreateView } from './components/views'
 import { TitleBar } from './components/common'
 import {
   EventDetailModal,
@@ -9,10 +13,28 @@ import {
   EventCreateModal,
   TeamCreateModal,
   SettingsModal,
+  AlarmHistoryModal,
 } from './components/modals'
 import { LoginPage } from './components/auth'
 import { useWorkspaces } from './hooks'
 import { useThemeStore, useAuthStore, useViewStore } from './stores'
+import { isTauriApp } from './utils/tauri'
+
+interface AlarmTriggeredPayload {
+  alarm_id: string
+  task_id: number
+  workspace_id: number
+  title: string
+  message: string
+  scheduled_start_at_unix: number
+}
+
+interface UserPreferences {
+  theme: string
+  language: string
+  timezone: string
+  notifications_enabled: boolean
+}
 
 function MainContent() {
   const { activeView } = useViewStore()
@@ -22,13 +44,77 @@ function MainContent() {
       return <TaskListView />
     case 'files':
       return <FileListView />
+    case 'memo':
+      return <MemoView />
+    case 'task_create':
+      return <TaskCreateView />
     default:
       return <Calendar />
   }
 }
 
 function AppContent() {
+  const { t } = useTranslation()
   useWorkspaces()
+
+  useEffect(() => {
+    if (!isTauriApp()) return
+
+    let unlisten: (() => void) | undefined
+
+    const setup = async () => {
+      try {
+        const preferences = await invoke<UserPreferences>('get_user_preferences')
+        await invoke('set_alarm_notifications_enabled', {
+          enabled: preferences.notifications_enabled,
+        })
+      } catch (error) {
+        console.error('Failed to sync alarm notification preference:', error)
+      }
+
+      try {
+        unlisten = await listen<AlarmTriggeredPayload>('alarm://trigger', async (event) => {
+          const payload = event.payload
+
+          if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            new Notification(payload.title, { body: payload.message })
+          } else if (
+            typeof Notification !== 'undefined' &&
+            Notification.permission !== 'denied'
+          ) {
+            Notification.requestPermission().then((permission) => {
+              if (permission === 'granted') {
+                new Notification(payload.title, { body: payload.message })
+              }
+            })
+          }
+
+          const snooze = await ask(
+            `${payload.message}\n\n${t('alarm.snoozePrompt')}`,
+            {
+              title: t('alarm.title'),
+              okLabel: t('alarm.snooze5m'),
+              cancelLabel: t('alarm.dismiss'),
+            }
+          )
+
+          if (snooze) {
+            await invoke('snooze_alarm', { alarm_id: payload.alarm_id, minutes: 5 })
+          } else {
+            await invoke('dismiss_alarm', { alarm_id: payload.alarm_id })
+          }
+        })
+      } catch (error) {
+        console.error('Failed to register alarm listener:', error)
+      }
+    }
+
+    setup()
+
+    return () => {
+      if (unlisten) unlisten()
+    }
+  }, [t])
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden">
@@ -45,6 +131,7 @@ function AppContent() {
       <EventCreateModal />
       <TeamCreateModal />
       <SettingsModal />
+      <AlarmHistoryModal />
     </div>
   )
 }

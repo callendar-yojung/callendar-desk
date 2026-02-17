@@ -30,6 +30,10 @@ export function WorkspaceList() {
   const inputRef = useRef<HTMLInputElement>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
 
+  const handleSelectWorkspace = async (workspaceId: number) => {
+    selectWorkspace(workspaceId)
+  }
+
   /** 워크스페이스 생성 */
   const createWorkspace = async () => {
     if (!name.trim() || isCreating) return
@@ -59,14 +63,14 @@ export function WorkspaceList() {
 
       if (response.workspace) {
         addWorkspace(response.workspace)
-        selectWorkspace(response.workspace.workspace_id)
+        await handleSelectWorkspace(response.workspace.workspace_id)
       }
 
       setName('')
       setIsAdding(false)
     } catch (e) {
       console.error('Failed to create workspace:', e)
-      alert(t('workspace.createError') || '워크스페이스 생성에 실패했습니다')
+      alert(e instanceof Error ? e.message : (t('workspace.createError') || '워크스페이스 생성에 실패했습니다'))
     } finally {
       setIsCreating(false)
     }
@@ -81,7 +85,6 @@ export function WorkspaceList() {
       `${t('workspace.deleteConfirmMessage')}\n\n"${workspaceName}"`,
       {
         title: t('workspace.deleteConfirm'),
-        type: 'warning',
         okLabel: t('workspace.delete'),
         cancelLabel: t('event.cancel'),
       }
@@ -262,7 +265,7 @@ export function WorkspaceList() {
                       </div>
                     ) : (
                       <button
-                        onClick={() => selectWorkspace(ws.workspace_id)}
+                        onClick={() => handleSelectWorkspace(ws.workspace_id)}
                         onDoubleClick={(e) => {
                           e.preventDefault()
                           startEditing(ws.workspace_id, ws.name)

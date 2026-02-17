@@ -6,6 +6,12 @@ import { authApi, usageApi, subscriptionApi } from '../../api'
 import type { UsageData, Subscription, SubscriptionStatus } from '../../types'
 
 type SettingsTab = 'profile' | 'system' | 'planUsage'
+interface UserPreferences {
+  theme: string
+  language: string
+  timezone: string
+  notifications_enabled: boolean
+}
 
 export function SettingsModal() {
   const { t } = useTranslation()
@@ -248,10 +254,15 @@ function SystemTab() {
   const { t, i18n } = useTranslation()
   const { theme, setTheme } = useThemeStore()
   const [autostart, setAutostart] = useState(false)
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null)
 
   useEffect(() => {
     invoke<boolean>('get_autostart')
       .then(setAutostart)
+      .catch(console.error)
+
+    invoke<UserPreferences>('get_user_preferences')
+      .then(setPreferences)
       .catch(console.error)
   }, [])
 
@@ -266,6 +277,22 @@ function SystemTab() {
 
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'ko' ? 'en' : 'ko')
+  }
+
+  const toggleNotifications = async () => {
+    if (!preferences) return
+    const next = {
+      ...preferences,
+      notifications_enabled: !preferences.notifications_enabled,
+    }
+
+    try {
+      const saved = await invoke<UserPreferences>('save_user_preferences', { preferences: next })
+      setPreferences(saved)
+      await invoke('set_alarm_notifications_enabled', { enabled: saved.notifications_enabled })
+    } catch (error) {
+      console.error('Failed to update notification preference:', error)
+    }
   }
 
   return (
@@ -339,6 +366,34 @@ function SystemTab() {
             <div
               className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
                 autostart ? 'translate-x-5' : 'translate-x-0.5'
+              }`}
+            />
+          </button>
+        }
+      />
+
+      <SettingRow
+        icon={
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+        }
+        label={t('settings.notifications')}
+        action={
+          <button
+            onClick={toggleNotifications}
+            className={`relative w-10 h-5 rounded-full transition-colors ${
+              preferences?.notifications_enabled
+                ? 'bg-blue-500'
+                : 'bg-gray-300 dark:bg-gray-600'
+            }`}
+          >
+            <div
+              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                preferences?.notifications_enabled
+                  ? 'translate-x-5'
+                  : 'translate-x-0.5'
               }`}
             />
           </button>

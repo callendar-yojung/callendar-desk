@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { format, parseISO, setHours, setMinutes } from 'date-fns'
-import { Modal, Button, Input, TextArea } from '../common'
+import { format, setHours, setMinutes } from 'date-fns'
+import { Modal, Button, Input } from '../common'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { useModalStore, useCalendarStore, useWorkspaceStore, useAuthStore } from '../../stores'
 import { taskApi, tagApi, fileApi, attachmentApi } from '../../api'
 import type { TaskStatus, Tag, Attachment } from '../../types'
+import { parseApiDateTime } from '../../utils/datetime'
+import RichTextEditor from '../editor/RichTextEditor'
+import { EMPTY_RICH_CONTENT, parseRichContent, serializeRichContent } from '../../utils/richText'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
@@ -33,7 +36,7 @@ export function EventEditModal() {
   const { user } = useAuthStore()
 
   const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
+  const [contentDoc, setContentDoc] = useState<Record<string, unknown>>(EMPTY_RICH_CONTENT)
   const [eventDate, setEventDate] = useState<Date>(new Date())
   const [startHour, setStartHour] = useState(9)
   const [startMinute, setStartMinute] = useState(0)
@@ -64,10 +67,10 @@ export function EventEditModal() {
 
   useEffect(() => {
     if (selectedEvent && openedModal === 'EDIT') {
-      const start = parseISO(selectedEvent.start_time)
-      const end = parseISO(selectedEvent.end_time)
+      const start = parseApiDateTime(selectedEvent.start_time)
+      const end = parseApiDateTime(selectedEvent.end_time)
       setTitle(selectedEvent.title)
-      setContent(selectedEvent.content || '')
+      setContentDoc(parseRichContent(selectedEvent.content))
       setEventDate(start)
       setStartHour(start.getHours())
       setStartMinute(start.getMinutes())
@@ -176,10 +179,12 @@ export function EventEditModal() {
 
       const backendStatus = backendStatusMap[status]
 
+      const serializedContent = serializeRichContent(contentDoc)
+
       const updateData = {
         task_id: selectedEvent.id,
         title: title.trim(),
-        content: content.trim() || undefined,
+        content: serializedContent || undefined,
         start_time: toMysqlDatetime(startDatetime),
         end_time: toMysqlDatetime(endDatetime),
         color,
@@ -195,7 +200,7 @@ export function EventEditModal() {
             ? {
                 ...e,
                 title: title.trim(),
-                content: content.trim() || undefined,
+                content: serializedContent || undefined,
                 color,
                 tag_ids: selectedTagIds,
                 start_time: startDatetime.toISOString(),
@@ -341,12 +346,17 @@ export function EventEditModal() {
                 </div>
               </div>
 
-              <TextArea
-                label={t('event.content')}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                rows={2}
-              />
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {t('event.content')}
+                </label>
+                <RichTextEditor
+                  initialContent={contentDoc}
+                  onChange={setContentDoc}
+                  contentKey={`edit-${selectedEvent.id}-${selectedEvent.updated_at}`}
+                  showToolbar={true}
+                />
+              </div>
             </div>
 
             {/* 태그 */}
